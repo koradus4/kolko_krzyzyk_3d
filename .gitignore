@@ -1,0 +1,33 @@
+# Pliki środowiska wirtualnego Python
+.venv/
+venv/
+env/
+ENV/
+
+# Pliki cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Pliki IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Pliki systemu operacyjnego
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logi
+*.log
+
+# Tymczasowe pliki
+*.tmp
+*.temp
+~*
+
+# Pliki pygame
+*.pyc
