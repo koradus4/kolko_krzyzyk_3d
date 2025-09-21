@@ -1,13 +1,5 @@
 """
-🎮 KÓŁKO I KRZZLOTY = (255, 220, 0)  # Jaśniejszy złoty
-CIEMNY_SZARY = (32, 32, 40)  # Ciemniejsze tło
-JASNY_SZARY = (220, 220, 220)
-FIOLETOWY = (180, 50, 255)  # Nowy kolor
-POMARANCZOWY = (255, 150, 0)  # Nowy kolor
-TURKUSOWY = (0, 200, 200)  # Nowy kolor
-
-
-class Kostka3D:2D VERSION Z AI 🎮
+🎮 KÓŁKO I KRZYŻYK 3D - PSEUDO 3D VERSION Z AI 🎮
 Wizualnie wygląda jak 3D ale używa tylko Pygame!
 Graj przeciwko inteligentnemu AI!
 """
@@ -17,6 +9,31 @@ import numpy as np
 import math
 import random
 import time
+import ctypes
+from ctypes import wintypes
+
+# Windows API dla bring-to-front
+try:
+    user32 = ctypes.windll.user32
+    kernel32 = ctypes.windll.kernel32
+    
+    def bring_window_to_front(window_title):
+        """Przenosi okno o danym tytule na pierwszy plan"""
+        def enum_windows_proc(hwnd, lParam):
+            title = ctypes.create_unicode_buffer(256)
+            user32.GetWindowTextW(hwnd, title, 256)
+            if window_title in title.value:
+                user32.SetForegroundWindow(hwnd)
+                user32.BringWindowToTop(hwnd)
+                return False  # Stop enumeration
+            return True  # Continue enumeration
+        
+        EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
+        user32.EnumWindows(EnumWindowsProc(enum_windows_proc), 0)
+        
+except Exception:
+    def bring_window_to_front(window_title):
+        pass  # Fallback - nic nie rób na innych systemach
 
 # Kolory - ULEPSZONE DLA LEPSZEJ WIDOCZNOŚCI
 BIALY = (255, 255, 255)
@@ -47,6 +64,26 @@ class Kostka3D:
         self.koniec_gry = False
         self.zwyciezca = None
         self.czy_ruch_ai = False  # Czy teraz kolej AI
+        
+        # Tryb AI vs AI
+        self.tryb_ai_vs_ai = False
+        self.ai1_nazwa = "AI Czerwony 🔴"
+        self.ai2_nazwa = "AI Niebieski 🔵"
+        self.auto_ai_vs_ai = False  # Automatyczne uruchomienie AI vs AI po starcie
+        self.ai_delay = 10000  # 10 sekund opóźnienia między ruchami AI
+        
+        # Parametry renderowania - POWIĘKSZONE
+        self.centrum_x = screen_width // 2
+        self.centrum_y = screen_height // 2
+        self.rozmiar_kostki = 250  # Powiększone z 150 do 250
+        self.rot_x = 20  # Rotacja dla perspektywy
+        self.rot_y = 30
+        
+        # Pozycje pól w 3D (będą konwertowane na 2D)
+        self.pola_3d = []
+        self.pola_2d = []  # Pozycje po konwersji
+        self.highlighted_pole = None  # Podświetlone pole
+        self._wygeneruj_pola()
         
         # Tryb AI vs AI
         self.tryb_ai_vs_ai = False
@@ -679,14 +716,43 @@ def narysuj_ui(screen, kostka, font):
         screen.blit(tekst, (15, 560 + i * 22))  # Przesunięte niżej bo większe okno
 
 
-def main(auto_demo=False):
+def main(auto_demo=False, instance=1):
     """Główna funkcja gry"""
     pygame.init()
     
-    # Większe okno dla większej kostki
-    szeroksc, wysoksc = 1000, 700  # Powiększone okno
+    # Pozycjonowanie okien dla różnych instancji
+    window_positions = {
+        1: (200, 100),   # Główne okno - centrum
+        2: (800, 400),   # Drugie okno - prawy dół  
+        3: (50, 400)     # Trzecie okno - lewy dół
+    }
+    
+    # Rozmiary okien - główne większe, pozostałe mniejsze
+    window_sizes = {
+        1: (1000, 700),  # Główne okno - duże
+        2: (600, 400),   # Drugie okno - mniejsze
+        3: (600, 400)    # Trzecie okno - mniejsze
+    }
+    
+    # Ustawienie pozycji okna
+    if instance in window_positions:
+        x, y = window_positions[instance]
+        import os
+        os.environ['SDL_VIDEO_WINDOW_POS'] = f'{x},{y}'
+    
+    # Rozmiar okna zależny od instancji
+    if instance in window_sizes:
+        szeroksc, wysoksc = window_sizes[instance]
+    else:
+        szeroksc, wysoksc = 900, 600
+        
     screen = pygame.display.set_mode((szeroksc, wysoksc))
-    pygame.display.set_caption("🎮 Kółko i Krzyżyk 3D - Pseudo 3D")
+    
+    # Tytuł okna z oznaczeniem aktywności
+    if instance == 1:
+        pygame.display.set_caption(f"🎮 Kółko i Krzyżyk 3D - Gra #{instance} [GŁÓWNA]")
+    else:
+        pygame.display.set_caption(f"🎮 Kółko i Krzyżyk 3D - Gra #{instance}")
     
     kostka = Kostka3D(szeroksc, wysoksc)
     
@@ -694,6 +760,18 @@ def main(auto_demo=False):
     if auto_demo:
         kostka.ai_delay = 10000  # 10 sekund zamiast 1.2
         kostka.wlacz_tryb_ai_vs_ai(auto_start=True)
+    
+    # Multi-instance mode - Human vs AI z 10s delay dla AI
+    if instance > 0 and not auto_demo:
+        kostka.ai_delay = 10000  # 10 sekund dla AI w trybie human vs AI
+        kostka.czy_ruch_ai = False  # Gracz zaczyna
+        print(f"🎮 INSTANCJA #{instance} - HUMAN vs AI")
+        print(f"👤 TY: 🟧 (pomarańczowe kwadraty)  🤖 AI: 🟦 (niebieskie kwadraty)")
+        print(f"⏰ AI wykona ruch co 10 sekund")
+        if instance == 1:
+            print(f"🎯 GŁÓWNA GRA - na pierwszym planie")
+        else:
+            print(f"📱 Gra w tle - naciśnij {instance} aby przybliżyć")
     
     font = pygame.font.Font(None, 36)
     clock = pygame.time.Clock()
@@ -731,6 +809,21 @@ def main(auto_demo=False):
                 running = False
             
             elif event.type == pygame.KEYDOWN:
+                # Globalne przełączanie między instancjami - bring to front
+                if event.key == pygame.K_1:
+                    print(f"🎮 AKTYWACJA: Gra #1 - GŁÓWNA")
+                    bring_window_to_front("Gra #1")
+                    pygame.display.set_caption(f"🎮 Kółko i Krzyżyk 3D - Gra #1 [GŁÓWNA - AKTYWNA]")
+                elif event.key == pygame.K_2:
+                    print(f"🎮 AKTYWACJA: Gra #2")
+                    bring_window_to_front("Gra #2") 
+                    pygame.display.set_caption(f"🎮 Kółko i Krzyżyk 3D - Gra #2 [AKTYWNA]")
+                elif event.key == pygame.K_3:
+                    print(f"🎮 AKTYWACJA: Gra #3")
+                    bring_window_to_front("Gra #3")
+                    pygame.display.set_caption(f"🎮 Kółko i Krzyżyk 3D - Gra #3 [AKTYWNA]")
+                
+                # Reszta obsługi klawiszy
                 if event.key == pygame.K_r:
                     kostka = Kostka3D(szeroksc, wysoksc)  # Restart gry
                     ai_timer = pygame.time.get_ticks()
@@ -784,8 +877,14 @@ def main(auto_demo=False):
         # AI wykonuje ruch po krótkiej przerwie
         if kostka.czy_ruch_ai and not kostka.koniec_gry:
             current_time = pygame.time.get_ticks()
-            # Dynamiczne opóźnienie - krótkie w trybie normalnym, długie w auto-demo
-            delay = kostka.ai_delay if kostka.auto_ai_vs_ai else 1200
+            # Dynamiczne opóźnienie - długie w multi-instance lub auto-demo
+            if auto_demo:
+                delay = kostka.ai_delay if kostka.auto_ai_vs_ai else 1200
+            elif instance > 0:
+                delay = kostka.ai_delay  # 10 sekund w trybie multi-instance
+            else:
+                delay = 1200  # Normalny tryb
+                
             if current_time - ai_timer > delay:
                 if kostka.tryb_ai_vs_ai:
                     kostka.ruch_ai_vs_ai()
@@ -803,8 +902,553 @@ def main(auto_demo=False):
     pygame.quit()
 
 
+class MouseControlledMultiGameManager:
+    """Manager obsługujący 3 gry z aktywacją przez kliknięcie myszą"""
+    
+    def __init__(self, screen_width, screen_height):
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        
+        # 3 instancje gier
+        self.games = [
+            Kostka3D(screen_width, screen_height),  # Gra 0 - lewa w tle
+            Kostka3D(screen_width, screen_height),  # Gra 1 - prawa w tle  
+            Kostka3D(screen_width, screen_height)   # Gra 2 - aktywna z przodu
+        ]
+        
+        # Indeksy gier: [lewa_tło, prawa_tło, aktywna]
+        self.game_positions = [0, 1, 2]  # które gry są na których pozycjach
+        
+        # Ustawienia każdej gry na Human vs AI z 10s delay
+        for i, game in enumerate(self.games):
+            game.ai_delay = 10000
+            game.czy_ruch_ai = False
+            print(f"🎮 Gra #{i+1} - HUMAN vs AI gotowa (sterowanie myszą)")
+        
+        # Timery AI dla każdej gry
+        self.ai_timers = [0, 0, 0]
+        
+        # Layout pozycji w oknie
+        self.setup_layout()
+    
+    def setup_layout(self):
+        """Ustawia pozycje i rozmiary gier w oknie"""
+        # Gra aktywna (duża, na dole)
+        self.active_rect = pygame.Rect(100, 200, 800, 400)
+        
+        # Gry w tle (małe, u góry) - KLIKALNE
+        self.background_left_rect = pygame.Rect(50, 20, 350, 160)   # Lewa góra
+        self.background_right_rect = pygame.Rect(500, 20, 350, 160) # Prawa góra
+    
+    def setup_fullscreen_layout(self):
+        """Ustawia pozycje dla pełnego ekranu - większe i lepiej rozłożone"""
+        # Oblicz rozmiary na podstawie rozdzielczości ekranu
+        margin = 40
+        background_width = (self.screen_width - 4 * margin) // 2.5  # Większe gry w tle
+        background_height = int(background_width * 0.6)  # Proporcje 5:3
+        
+        # Aktywna gra - mniejsza, żeby lepiej było widać gry w tle
+        active_width = int(self.screen_width * 0.5)  # 50% szerokości ekranu (było 70%)
+        active_height = int(active_width * 0.6)  # Proporcje 5:3
+        active_x = (self.screen_width - active_width) // 2
+        active_y = self.screen_height - active_height - margin * 2  # Więcej miejsca z góry
+        
+        self.active_rect = pygame.Rect(active_x, active_y, active_width, active_height)
+        
+        # Gry w tle - równomiernie rozłożone u góry
+        top_y = margin
+        left_x = margin
+        right_x = self.screen_width - background_width - margin
+        
+        self.background_left_rect = pygame.Rect(left_x, top_y, background_width, background_height)
+        self.background_right_rect = pygame.Rect(right_x, top_y, background_width, background_height)
+    
+    def handle_mouse_click(self, mouse_pos):
+        """Obsługuje kliknięcia myszą - zarówno gameplay jak i aktywacja"""
+        mx, my = mouse_pos
+        
+        # Sprawdź czy kliknięto w grę w tle (aktywacja)
+        if self.background_left_rect.collidepoint(mx, my):
+            # Kliknięto w lewą grę w tle - aktywuj ją
+            self.activate_background_game(0)  # lewa pozycja tła
+            return
+        
+        if self.background_right_rect.collidepoint(mx, my):
+            # Kliknięto w prawą grę w tle - aktywuj ją
+            self.activate_background_game(1)  # prawa pozycja tła
+            return
+        
+        # Sprawdź czy kliknięto w aktywną grę (gameplay)
+        if self.active_rect.collidepoint(mx, my):
+            self.handle_active_game_click(mouse_pos)
+    
+    def activate_background_game(self, background_position):
+        """Aktywuje grę z tła (pozycja 0=lewa, 1=prawa)"""
+        # Zamiana: aktywna <-> wybrana z tła
+        active_game_idx = self.game_positions[2]  # aktualna aktywna
+        background_game_idx = self.game_positions[background_position]  # wybrana z tła
+        
+        # Swap
+        self.game_positions[2] = background_game_idx      # tło -> aktywna
+        self.game_positions[background_position] = active_game_idx  # aktywna -> tło
+        
+        pos_name = "lewą" if background_position == 0 else "prawą"
+        print(f"🖱️ KLIKNIĘTO: {pos_name} grę -> Gra #{background_game_idx+1} teraz AKTYWNA")
+    
+    def handle_active_game_click(self, mouse_pos):
+        """Obsługuje gameplay w aktywnej grze"""
+        active_game = self.games[self.game_positions[2]]
+        
+        # Przeskaluj pozycję myszy dla aktywnej gry
+        scaled_pos = self.scale_mouse_pos(mouse_pos, self.active_rect)
+        if scaled_pos:
+            pole = active_game.znajdz_klikniete_pole(scaled_pos)
+            if pole and not active_game.koniec_gry and not active_game.czy_ruch_ai:
+                x, y, z = pole
+                if active_game.wykonaj_ruch(x, y, z):
+                    active_idx = self.game_positions[2]
+                    print(f"👤 Gracz zagrał w grze #{active_idx+1} na pozycji ({z},{y},{x})")
+                    self.ai_timers[active_idx] = pygame.time.get_ticks()
+    
+    def update_ai(self):
+        """Aktualizuje AI we wszystkich grach"""
+        current_time = pygame.time.get_ticks()
+        
+        for i, game in enumerate(self.games):
+            if game.czy_ruch_ai and not game.koniec_gry:
+                if current_time - self.ai_timers[i] > game.ai_delay:
+                    game.ruch_ai()
+                    self.ai_timers[i] = current_time
+                    print(f"🤖 AI w grze #{i+1} wykonało ruch")
+    
+    def scale_mouse_pos(self, mouse_pos, target_rect):
+        """Przeskalowuje pozycję myszy do docelowego prostokąta"""
+        mx, my = mouse_pos
+        if target_rect.collidepoint(mx, my):
+            # Przeskaluj do rozmiaru gry
+            rel_x = (mx - target_rect.x) * self.screen_width // target_rect.width
+            rel_y = (my - target_rect.y) * self.screen_height // target_rect.height
+            return (rel_x, rel_y)
+        return None
+    
+    def draw(self, screen):
+        """Rysuje wszystkie 3 gry z wizualną wskazówką o klikalności"""
+        # Wypełnij tło
+        screen.fill((20, 25, 35))
+        
+        # Pobierz gry według pozycji
+        left_game = self.games[self.game_positions[0]]
+        right_game = self.games[self.game_positions[1]]
+        active_game = self.games[self.game_positions[2]]
+        
+        # Tymczasowe powierzchnie
+        left_surface = pygame.Surface((self.screen_width, self.screen_height))
+        right_surface = pygame.Surface((self.screen_width, self.screen_height))
+        active_surface = pygame.Surface((self.screen_width, self.screen_height))
+        
+        # Narysuj gry na powierzchniach
+        left_game.narysuj_kostke(left_surface)
+        right_game.narysuj_kostke(right_surface)
+        active_game.narysuj_kostke(active_surface)
+        
+        # Przeskaluj
+        left_scaled = pygame.transform.scale(left_surface, self.background_left_rect.size)
+        right_scaled = pygame.transform.scale(right_surface, self.background_right_rect.size)
+        active_scaled = pygame.transform.scale(active_surface, self.active_rect.size)
+        
+        # Dodaj ramki - KLIKALNE gry mają żółte ramki
+        pygame.draw.rect(screen, (255, 255, 0), self.background_left_rect, 3)   # Żółta - klikalna
+        pygame.draw.rect(screen, (255, 255, 0), self.background_right_rect, 3)  # Żółta - klikalna  
+        pygame.draw.rect(screen, (0, 255, 0), self.active_rect, 3)  # Zielona - aktywna do gry
+        
+        # Narysuj gry
+        screen.blit(left_scaled, self.background_left_rect)
+        screen.blit(right_scaled, self.background_right_rect)
+        screen.blit(active_scaled, self.active_rect)
+        
+        # Etykiety z instrukcjami
+        font = pygame.font.Font(None, 24)
+        left_idx = self.game_positions[0]
+        right_idx = self.game_positions[1] 
+        active_idx = self.game_positions[2]
+        
+        left_text = font.render(f"Gra #{left_idx+1} - KLIKNIJ aby aktywować", True, (255, 255, 0))
+        right_text = font.render(f"Gra #{right_idx+1} - KLIKNIJ aby aktywować", True, (255, 255, 0))
+        active_text = font.render(f"Gra #{active_idx+1} - AKTYWNA (graj tutaj)", True, (0, 255, 0))
+        
+        screen.blit(left_text, (self.background_left_rect.x, self.background_left_rect.y - 25))
+        screen.blit(right_text, (self.background_right_rect.x, self.background_right_rect.y - 25))
+        screen.blit(active_text, (self.active_rect.x + 250, self.active_rect.y - 25))
+
+
+def main_mouse_controlled_games():
+    """Główna funkcja dla 3 gier sterowanych myszą"""
+    pygame.init()
+    
+    # Pełny ekran na starcie
+    screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+    screen_width = screen.get_width()
+    screen_height = screen.get_height()
+    
+    pygame.display.set_caption("🖱️ Kółko i Krzyżyk 3D - STEROWANIE MYSZĄ (PEŁNY EKRAN)")
+    
+    # Manager 3 gier sterowanych myszą - dostosowany do pełnego ekranu
+    mouse_manager = MouseControlledMultiGameManager(screen_width, screen_height)
+    
+    # Dostosuj layout do pełnego ekranu
+    mouse_manager.setup_fullscreen_layout()
+    clock = pygame.time.Clock()
+    
+    print("🖱️ MOUSE-CONTROLLED MULTI-GAME MODE!")
+    print("="*50)
+    print("🎯 3 gry sterowane myszą (PEŁNY EKRAN):")
+    print("   - 1 aktywna gra (zielona ramka) - graj tutaj")
+    print("   - 2 gry w tle (żółte ramki) - KLIKNIJ aby aktywować")
+    print("🖱️ STEROWANIE:")
+    print("   - KLIKNIJ w grę w tle -> aktywuje ją")
+    print("   - KLIKNIJ w aktywnej grze -> wykonaj ruch")
+    print("   - PPM -> obracaj kostką")
+    print("   - F11 -> przełącz pełny ekran/okno")
+    print("   - ESC -> wyjście")
+    print("🤖 AI wykonuje ruch co 10 sekund w każdej grze")
+    print("="*50)
+    
+    mouse_pressed = False
+    last_mouse_pos = None
+    fullscreen = True
+    
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    # Potwierdzenie wyjścia
+                    print("❓ ESC naciśnięty - naciśnij ponownie ESC aby wyjść lub dowolny inny klawisz aby kontynuować...")
+                    confirm_exit = False
+                    waiting_for_confirm = True
+                    
+                    # Pętla potwierdzenia
+                    while waiting_for_confirm:
+                        for confirm_event in pygame.event.get():
+                            if confirm_event.type == pygame.KEYDOWN:
+                                if confirm_event.key == pygame.K_ESCAPE:
+                                    confirm_exit = True
+                                waiting_for_confirm = False
+                            elif confirm_event.type == pygame.QUIT:
+                                confirm_exit = True
+                                waiting_for_confirm = False
+                        
+                        # Rysuj ekran podczas oczekiwania na potwierdzenie
+                        mouse_manager.draw(screen)
+                        
+                        # Dodaj tekst potwierdzenia
+                        font = pygame.font.Font(None, 48)
+                        text = font.render("ESC ponownie = WYJŚCIE, inny klawisz = KONTYNUUJ", True, (255, 255, 0))
+                        text_rect = text.get_rect(center=(screen.get_width()//2, 50))
+                        screen.blit(text, text_rect)
+                        
+                        pygame.display.flip()
+                        pygame.time.wait(50)
+                    
+                    if confirm_exit:
+                        running = False
+                
+                elif event.key == pygame.K_F11:
+                    # Przełącz tryb pełny ekran
+                    fullscreen = not fullscreen
+                    if fullscreen:
+                        screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+                        pygame.display.set_caption("🖱️ Kółko i Krzyżyk 3D - PEŁNY EKRAN")
+                    else:
+                        screen = pygame.display.set_mode((1400, 900))
+                        pygame.display.set_caption("🖱️ Kółko i Krzyżyk 3D - OKNO")
+                    
+                    # Zaktualizuj rozmiary i layout
+                    screen_width = screen.get_width()
+                    screen_height = screen.get_height()
+                    mouse_manager.screen_width = screen_width
+                    mouse_manager.screen_height = screen_height
+                    
+                    if fullscreen:
+                        mouse_manager.setup_fullscreen_layout()
+                    else:
+                        mouse_manager.setup_layout()
+                    
+                    print(f"🖥️ Przełączono na: {'Pełny ekran' if fullscreen else 'Okno'} ({screen_width}x{screen_height})")
+                
+                # Obsługa strzałek - obracanie aktywnej kostki
+                elif event.key == pygame.K_LEFT:
+                    active_game = mouse_manager.games[mouse_manager.game_positions[2]]
+                    active_game.obrot(-10, 0)
+                    print("⬅️ Obracanie w lewo")
+                elif event.key == pygame.K_RIGHT:
+                    active_game = mouse_manager.games[mouse_manager.game_positions[2]]
+                    active_game.obrot(10, 0)
+                    print("➡️ Obracanie w prawo")
+                elif event.key == pygame.K_UP:
+                    active_game = mouse_manager.games[mouse_manager.game_positions[2]]
+                    active_game.obrot(0, -10)
+                    print("⬆️ Obracanie w górę")
+                elif event.key == pygame.K_DOWN:
+                    active_game = mouse_manager.games[mouse_manager.game_positions[2]]
+                    active_game.obrot(0, 10)
+                    print("⬇️ Obracanie w dół")
+            
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # LPM - gameplay lub aktywacja
+                    mouse_manager.handle_mouse_click(event.pos)
+                elif event.button == 3:  # PPM - obracanie kostki (tylko aktywna gra)
+                    mouse_pressed = True
+                    last_mouse_pos = event.pos
+            
+            elif event.type == pygame.MOUSEBUTTONUP:
+                if event.button == 3:  # PPM - zakończ obracanie
+                    mouse_pressed = False
+            
+            elif event.type == pygame.MOUSEMOTION:
+                # Obracanie kostki w aktywnej grze
+                if mouse_pressed:
+                    active_game = mouse_manager.games[mouse_manager.game_positions[2]]
+                    if last_mouse_pos:
+                        dx = event.pos[0] - last_mouse_pos[0]
+                        dy = event.pos[1] - last_mouse_pos[1]
+                        # Sprawdź czy mysz jest w obszarze aktywnej gry
+                        if mouse_manager.active_rect.collidepoint(event.pos):
+                            active_game.obrot(dx, dy)
+                        last_mouse_pos = event.pos
+        
+        # Update AI w wszystkich grach
+        mouse_manager.update_ai()
+        
+        # Renderowanie
+        mouse_manager.draw(screen)
+        pygame.display.flip()
+        clock.tick(60)
+    
+    pygame.quit()
+
+
+class MultiGameManager:
+    """Manager do obsługi 3 gier w jednym oknie"""
+    
+    def __init__(self, screen_width, screen_height):
+        self.screen_width = screen_width
+        self.screen_height = screen_height
+        
+        # 3 instancje gier
+        self.games = [
+            Kostka3D(screen_width, screen_height),  # Gra 0 - lewa w tle
+            Kostka3D(screen_width, screen_height),  # Gra 1 - prawa w tle  
+            Kostka3D(screen_width, screen_height)   # Gra 2 - aktywna z przodu
+        ]
+        
+        # Indeksy gier: [lewa_tło, prawa_tło, aktywna]
+        self.game_positions = [0, 1, 2]  # które gry są na których pozycjach
+        self.active_game_index = 2  # indeks aktywnej gry (zawsze 2)
+        
+        # Ustawienia każdej gry na Human vs AI z 10s delay
+        for i, game in enumerate(self.games):
+            game.ai_delay = 10000
+            game.czy_ruch_ai = False
+            print(f"🎮 Gra #{i+1} - HUMAN vs AI gotowa")
+        
+        # Timery AI dla każdej gry
+        self.ai_timers = [0, 0, 0]
+        
+        # Layout pozycji w oknie
+        self.setup_layout()
+    
+    def setup_layout(self):
+        """Ustawia pozycje i rozmiary gier w oknie"""
+        # Gra aktywna (duża, na dole)
+        self.active_rect = pygame.Rect(100, 200, 800, 400)
+        
+        # Gry w tle (małe, u góry)
+        self.background_left_rect = pygame.Rect(50, 20, 350, 160)   # Lewa góra
+        self.background_right_rect = pygame.Rect(500, 20, 350, 160) # Prawa góra
+    
+    def swap_games(self, direction):
+        """Zamienia aktywną grę z grą z tła"""
+        if direction == 1:  # Cyfra 1 - lewa gra na pierwszy plan
+            # Swap: aktywna <-> lewa_tło
+            active_idx = self.game_positions[2]  # aktualna aktywna
+            left_idx = self.game_positions[0]    # lewa w tle
+            
+            self.game_positions[2] = left_idx    # lewa staje się aktywna
+            self.game_positions[0] = active_idx  # aktywna idzie na lewe tło
+            
+            print(f"🔄 SWAP: Gra #{left_idx+1} na pierwszy plan, Gra #{active_idx+1} na lewe tło")
+            
+        elif direction == 2:  # Cyfra 2 - prawa gra na pierwszy plan  
+            # Swap: aktywna <-> prawa_tło
+            active_idx = self.game_positions[2]  # aktualna aktywna
+            right_idx = self.game_positions[1]   # prawa w tle
+            
+            self.game_positions[2] = right_idx   # prawa staje się aktywna
+            self.game_positions[1] = active_idx  # aktywna idzie na prawe tło
+            
+            print(f"🔄 SWAP: Gra #{right_idx+1} na pierwszy plan, Gra #{active_idx+1} na prawe tło")
+    
+    def update_ai(self):
+        """Aktualizuje AI we wszystkich grach"""
+        current_time = pygame.time.get_ticks()
+        
+        for i, game in enumerate(self.games):
+            if game.czy_ruch_ai and not game.koniec_gry:
+                if current_time - self.ai_timers[i] > game.ai_delay:
+                    game.ruch_ai()
+                    self.ai_timers[i] = current_time
+                    print(f"🤖 AI w grze #{i+1} wykonało ruch")
+    
+    def handle_click(self, mouse_pos):
+        """Obsługuje kliknięcia tylko w aktywnej grze"""
+        active_game = self.games[self.game_positions[2]]
+        
+        # Przeskaluj pozycję myszy dla aktywnej gry
+        scaled_pos = self.scale_mouse_pos(mouse_pos, self.active_rect)
+        if scaled_pos:
+            pole = active_game.znajdz_klikniete_pole(scaled_pos)
+            if pole and not active_game.koniec_gry and not active_game.czy_ruch_ai:
+                x, y, z = pole
+                if active_game.wykonaj_ruch(x, y, z):
+                    active_idx = self.game_positions[2]
+                    print(f"👤 Gracz zagrał w grze #{active_idx+1} na pozycji ({z},{y},{x})")
+                    self.ai_timers[active_idx] = pygame.time.get_ticks()
+    
+    def scale_mouse_pos(self, mouse_pos, target_rect):
+        """Przeskalowuje pozycję myszy do docelowego prostokąta"""
+        mx, my = mouse_pos
+        if target_rect.collidepoint(mx, my):
+            # Przeskaluj do rozmiaru gry
+            rel_x = (mx - target_rect.x) * self.screen_width // target_rect.width
+            rel_y = (my - target_rect.y) * self.screen_height // target_rect.height
+            return (rel_x, rel_y)
+        return None
+    
+    def draw(self, screen):
+        """Rysuje wszystkie 3 gry"""
+        # Wypełnij tło
+        screen.fill((20, 25, 35))
+        
+        # Narysuj gry w tle (małe)
+        left_game = self.games[self.game_positions[0]]
+        right_game = self.games[self.game_positions[1]]
+        active_game = self.games[self.game_positions[2]]
+        
+        # Tymczasowe powierzchnie dla gier w tle
+        left_surface = pygame.Surface((self.screen_width, self.screen_height))
+        right_surface = pygame.Surface((self.screen_width, self.screen_height))
+        active_surface = pygame.Surface((self.screen_width, self.screen_height))
+        
+        # Narysuj gry na tymczasowych powierzchniach
+        left_game.narysuj_kostke(left_surface)
+        right_game.narysuj_kostke(right_surface)
+        active_game.narysuj_kostke(active_surface)
+        
+        # Przeskaluj i narysuj na ekranie
+        left_scaled = pygame.transform.scale(left_surface, self.background_left_rect.size)
+        right_scaled = pygame.transform.scale(right_surface, self.background_right_rect.size)
+        active_scaled = pygame.transform.scale(active_surface, self.active_rect.size)
+        
+        # Dodaj ramki
+        pygame.draw.rect(screen, (100, 100, 100), self.background_left_rect, 2)
+        pygame.draw.rect(screen, (100, 100, 100), self.background_right_rect, 2) 
+        pygame.draw.rect(screen, (255, 255, 255), self.active_rect, 3)  # Aktywna - biała ramka
+        
+        screen.blit(left_scaled, self.background_left_rect)
+        screen.blit(right_scaled, self.background_right_rect)
+        screen.blit(active_scaled, self.active_rect)
+        
+        # Etykiety
+        font = pygame.font.Font(None, 24)
+        left_idx = self.game_positions[0]
+        right_idx = self.game_positions[1] 
+        active_idx = self.game_positions[2]
+        
+        left_text = font.render(f"Gra #{left_idx+1} (naciśnij 1)", True, (200, 200, 200))
+        right_text = font.render(f"Gra #{right_idx+1} (naciśnij 2)", True, (200, 200, 200))
+        active_text = font.render(f"Gra #{active_idx+1} - AKTYWNA", True, (255, 255, 255))
+        
+        screen.blit(left_text, (self.background_left_rect.x, self.background_left_rect.y - 25))
+        screen.blit(right_text, (self.background_right_rect.x, self.background_right_rect.y - 25))
+        screen.blit(active_text, (self.active_rect.x + 300, self.active_rect.y - 25))
+
+
+def main_multi_games():
+    """Główna funkcja dla 3 gier w jednym oknie"""
+    pygame.init()
+    
+    # Duże okno dla 3 gier
+    screen_width, screen_height = 1200, 800
+    screen = pygame.display.set_mode((screen_width, screen_height))
+    pygame.display.set_caption("🎮 Kółko i Krzyżyk 3D - 3 GRY W JEDNYM OKNIE")
+    
+    # Manager 3 gier
+    multi_manager = MultiGameManager(screen_width, screen_height)
+    clock = pygame.time.Clock()
+    
+    print("🎮 MULTI-GAME MODE STARTED!")
+    print("="*50)
+    print("🎯 3 gry w jednym oknie:")
+    print("   - 1 aktywna gra (duża, na dole)")
+    print("   - 2 gry w tle (małe, u góry)")
+    print("📱 STEROWANIE:")
+    print("   - CYFRA 1: przełącz na lewą grę")
+    print("   - CYFRA 2: przełącz na prawą grę") 
+    print("   - LPM: graj w aktywnej grze")
+    print("   - ESC: wyjście")
+    print("🤖 AI wykonuje ruch co 10 sekund w każdej grze")
+    print("="*50)
+    
+    running = True
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                running = False
+            
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_1:
+                    multi_manager.swap_games(1)
+                elif event.key == pygame.K_2:
+                    multi_manager.swap_games(2)
+            
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if event.button == 1:  # LPM
+                    multi_manager.handle_click(event.pos)
+        
+        # Update AI w wszystkich grach
+        multi_manager.update_ai()
+        
+        # Renderowanie
+        multi_manager.draw(screen)
+        pygame.display.flip()
+        clock.tick(60)
+    
+    pygame.quit()
+
+
 if __name__ == "__main__":
     import sys
-    # Sprawdź czy uruchomiono z parametrem --auto-demo
+    # Sprawdź parametry uruchomienia
     auto_demo = "--auto-demo" in sys.argv
-    main(auto_demo=auto_demo)
+    multi_games = "--multi-games" in sys.argv
+    mouse_games = "--mouse-games" in sys.argv
+    
+    if mouse_games:
+        main_mouse_controlled_games()
+    elif multi_games:
+        main_multi_games()
+    else:
+        # Sprawdź numer instancji dla starego trybu
+        instance = 0
+        for arg in sys.argv:
+            if arg.startswith("--instance="):
+                try:
+                    instance = int(arg.split("=")[1])
+                except ValueError:
+                    instance = 1
+        
+        main(auto_demo=auto_demo, instance=instance)
