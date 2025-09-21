@@ -1,0 +1,1023 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎯 3D Multi-Kostka - 3 Gry Jednocześnie</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 10px;
+            background: linear-gradient(135deg, #0c0c1e 0%, #1a1a3a 100%);
+            color: white;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        .game-canvas {
+            position: absolute;
+            border: 3px solid;
+            background-color: #000000;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        
+        .game-active {
+            border-color: #00ff88 !important;
+            box-shadow: 0 0 30px rgba(0,255,136,0.5);
+            z-index: 10;
+        }
+        
+        .game-background {
+            border-color: #ffaa00;
+            opacity: 0.85;
+            z-index: 1;
+        }
+        
+        .game-info {
+            position: absolute;
+            top: -30px;
+            left: 0;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(0,0,0,0.8);
+        }
+        
+        #totalScore {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            color: #00ff88;
+            background: rgba(0,0,0,0.8);
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: 2px solid #00ff88;
+        }
+        
+        #instructions {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 14px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #ffaa00;
+            max-width: 300px;
+        }
+        
+        .instruction-key {
+            display: inline-block;
+            padding: 2px 6px;
+            background: #333;
+            border-radius: 3px;
+            margin: 0 2px;
+            font-family: monospace;
+            color: #ffaa00;
+        }
+        
+        #debugInfo {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            font-size: 12px;
+            color: #888;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas0" class="game-canvas game-background">
+            <div class="game-info">Gra #1 - Kliknij aby aktywować</div>
+        </canvas>
+        <canvas id="gameCanvas1" class="game-canvas game-background">
+            <div class="game-info">Gra #2 - Kliknij aby aktywować</div>
+        </canvas>
+        <canvas id="gameCanvas2" class="game-canvas game-active">
+            <div class="game-info">Gra #3 - AKTYWNA</div>
+        </canvas>
+        
+        <div id="totalScore">🏆 Wynik: +0</div>
+        
+        <div id="debugInfo">
+            Aktywna gra: #3 | AI myśli w: 2 grach | Status: OK
+        </div>
+    </div>
+
+    <script>
+        class MultiCubeManager {
+            constructor() {
+                this.games = [];
+                
+                // INDEKSY GIER jak w desktop: [lewa_tło, prawa_tło, aktywna]
+                this.gamePositions = [0, 1, 2];  // które gry są na których pozycjach
+                this.totalScore = 0;
+                
+                // Pozycje gier (layout stały)
+                this.gameLayouts = {
+                    backgroundLeft: { x: 50, y: 50, width: 350, height: 200 },    // Lewa góra
+                    backgroundRight: { x: 450, y: 50, width: 350, height: 200 },   // Prawa góra  
+                    active: { x: 150, y: 300, width: 600, height: 350 }   // Duża na dole - AKTYWNA
+                };
+                
+                // Timery AI i końca gry
+                this.aiTimers = [0, 0, 0];
+                this.gameEndTimers = [0, 0, 0];
+                this.gameEndMessages = [null, null, null];
+                this.gamesInEndState = [false, false, false];
+                
+                this.initializeGames();
+                this.setupEventListeners();
+                this.animate();
+            }
+            
+            initializeGames() {
+                // Utwórz 3 gry (indeksy 0, 1, 2)
+                for (let i = 0; i < 3; i++) {
+                    const canvas = document.getElementById(`gameCanvas${i}`);
+                    const game = new MultiCube3D(canvas, i);
+                    this.games.push(game);
+                    
+                    console.log(`🎮 Gra #${i+1} utworzona`);
+                }
+                
+                // Ustaw pozycje na kanvasach
+                this.updateCanvasPositions();
+            }
+            
+            updateCanvasPositions() {
+                // Przypisz pozycje według gamePositions
+                const leftGameIdx = this.gamePositions[0];   // lewa tło
+                const rightGameIdx = this.gamePositions[1];  // prawa tło  
+                const activeGameIdx = this.gamePositions[2]; // aktywna
+                
+                // Ustaw pozycje i rozmiary
+                this.setCanvasLayout(leftGameIdx, this.gameLayouts.backgroundLeft, false);
+                this.setCanvasLayout(rightGameIdx, this.gameLayouts.backgroundRight, false);
+                this.setCanvasLayout(activeGameIdx, this.gameLayouts.active, true);
+                
+                console.log(`🎯 Layout: Lewa=#${leftGameIdx+1}, Prawa=#${rightGameIdx+1}, Aktywna=#${activeGameIdx+1}`);
+            }
+            
+            setCanvasLayout(gameIdx, layout, isActive) {
+                const canvas = document.getElementById(`gameCanvas${gameIdx}`);
+                const game = this.games[gameIdx];
+                
+                // Ustaw rozmiary canvas
+                canvas.width = layout.width;
+                canvas.height = layout.height;
+                canvas.style.left = layout.x + 'px';
+                canvas.style.top = layout.y + 'px';
+                canvas.style.width = layout.width + 'px';
+                canvas.style.height = layout.height + 'px';
+                
+                // Ustaw aktywność
+                canvas.className = isActive ? 'game-canvas game-active' : 'game-canvas game-background';
+                game.setActive(isActive);
+                game.updateSize(layout.width, layout.height);
+            }
+            
+            setupEventListeners() {
+                // Kliknięcia w gry
+                this.games.forEach((game, index) => {
+                    game.canvas.addEventListener('click', (event) => {
+                        this.handleMouseClick(event, index);
+                    });
+                    
+                    // Obracanie prawym przyciskiem tylko aktywnej gry
+                    game.canvas.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        const activeGameIdx = this.gamePositions[2];
+                        if (index === activeGameIdx) {
+                            game.rotationY += 0.2;
+                        }
+                    });
+                });
+                
+                // Klawisze
+                document.addEventListener('keydown', (e) => {
+                    const activeGameIdx = this.gamePositions[2];
+                    const activeGame = this.games[activeGameIdx];
+                    
+                    switch(e.key) {
+                        case 'ArrowUp':
+                            activeGame.rotationX -= 0.1;
+                            break;
+                        case 'ArrowDown':
+                            activeGame.rotationX += 0.1;
+                            break;
+                        case 'ArrowLeft':
+                            activeGame.rotationY -= 0.1;
+                            break;
+                        case 'ArrowRight':
+                            activeGame.rotationY += 0.1;
+                            break;
+                        case ' ':
+                            activeGame.newGame();
+                            e.preventDefault();
+                            break;
+                        case 'Escape':
+                            this.resetAllGames();
+                            break;
+                        case '1':
+                            this.activateBackgroundGame(0); // lewa
+                            break;
+                        case '2':
+                            this.activateBackgroundGame(1); // prawa
+                            break;
+                    }
+                });
+            }
+            
+            // KLUCZOWA FUNKCJA: Obsługa kliknięć jak w desktop
+            handleMouseClick(event, clickedGameIndex) {
+                const leftGameIdx = this.gamePositions[0];   // lewa tło
+                const rightGameIdx = this.gamePositions[1];  // prawa tło
+                const activeGameIdx = this.gamePositions[2]; // aktywna
+                
+                if (clickedGameIndex === leftGameIdx) {
+                    // Kliknięto w lewą grę w tle - aktywuj ją
+                    this.activateBackgroundGame(0);
+                    return;
+                }
+                
+                if (clickedGameIndex === rightGameIdx) {
+                    // Kliknięto w prawą grę w tle - aktywuj ją  
+                    this.activateBackgroundGame(1);
+                    return;
+                }
+                
+                if (clickedGameIndex === activeGameIdx) {
+                    // Kliknięto w aktywną grę - gameplay
+                    this.handleActiveGameClick(event, clickedGameIndex);
+                }
+            }
+            
+            // AKTYWACJA GRY Z TŁA (jak w desktop)
+            // Logika zamiany pozycji - bazowana na MouseControlledMultiGameManager
+            swapPositions(pos1, pos2) {
+                [this.gamePositions[pos1], this.gamePositions[pos2]] = 
+                [this.gamePositions[pos2], this.gamePositions[pos1]];
+                console.log(`🔄 Zamiana pozycji ${pos1} <-> ${pos2}:`, this.gamePositions);
+            }
+            
+            activateBackgroundGame(backgroundPosition) {
+                // backgroundPosition: 0=lewa, 1=prawa
+                const activeGameIdx = this.gamePositions[2]; // aktualna aktywna
+                const backgroundGameIdx = this.gamePositions[backgroundPosition]; // wybrana z tła
+                
+                if (activeGameIdx === backgroundGameIdx) {
+                    console.log(`⚠️ Gra #${backgroundGameIdx+1} już jest aktywna`);
+                    return false;
+                }
+                
+                // Używamy metody swapPositions jak w desktopie
+                console.log(`🔄 Zamiana: aktywna gra #${activeGameIdx+1} <-> tło gra #${backgroundGameIdx+1}`);
+                this.swapPositions(2, backgroundPosition);
+                
+                // Aktualizuj wszystkie gry
+                this.updateAllGames();
+                
+                const posName = backgroundPosition === 0 ? "lewą" : "prawą";
+                console.log(`🖱️ KLIKNIĘTO: ${posName} grę -> Gra #${backgroundGameIdx+1} teraz AKTYWNA`);
+                return true;
+            }
+            
+            // Aktualizacja wszystkich gier po zmianie pozycji
+            updateAllGames() {
+                this.games.forEach((game, i) => {
+                    const isActive = this.gamePositions[2] === i; // pozycja 2 to aktywna
+                    game.setActive(isActive);
+                });
+                this.updateCanvasPositions();
+                this.draw();
+            }
+            
+            // Rysowanie wszystkich gier
+            draw() {
+                this.games.forEach(game => {
+                    game.draw();
+                });
+            }
+            
+            // GAMEPLAY W AKTYWNEJ GRZE
+            handleActiveGameClick(event, gameIndex) {
+                const game = this.games[gameIndex];
+                
+                if (game.gameOver || game.currentPlayer !== 'X') {
+                    return;
+                }
+                
+                const rect = game.canvas.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+                
+                const field = game.getFieldFromClick(mouseX, mouseY);
+                if (field && game.board[field.z][field.y][field.x] === '') {
+                    game.makeMove(field.x, field.y, field.z);
+                    this.aiTimers[gameIndex] = Date.now();
+                    
+                    console.log(`👤 Gracz zagrał w grze #${gameIndex+1} na pozycji (${field.z},${field.y},${field.x})`);
+                    
+                    // AI ruch po chwili
+                    if (!game.gameOver && game.currentPlayer === 'O') {
+                        setTimeout(() => this.makeAIMove(gameIndex), 800);
+                    }
+                }
+            }
+            
+            makeAIMove(gameIndex) {
+                const game = this.games[gameIndex];
+                if (game.gameOver || game.currentPlayer !== 'O') return;
+                
+                // 1. Spróbuj wygrać (najwyższy priorytet)
+                let move = game.findBestMove('O');
+                if (move) {
+                    game.makeMove(move.x, move.y, move.z);
+                    console.log(`🤖 AI w grze #${gameIndex+1} wygrywa natychmiast!`);
+                    return;
+                }
+                
+                // 2. Zablokuj gracza przed wygraną (krytyczne!)
+                move = game.findBestMove('X');
+                if (move) {
+                    game.makeMove(move.x, move.y, move.z);
+                    console.log(`🤖 AI w grze #${gameIndex+1} blokuje wygraną gracza!`);
+                    return;
+                }
+                
+                // 3. MINIMAX - najlepszy ruch strategiczny (myślenie 2-3 ruchy naprzód)
+                move = game.findBestMoveWithMinimax();
+                if (move) {
+                    game.makeMove(move.x, move.y, move.z);
+                    console.log(`🤖 AI w grze #${gameIndex+1} gra strategicznie (Minimax) na (${move.x},${move.y},${move.z}) - ocena: ${move.score}`);
+                    return;
+                }
+                
+                // 4. STRATEGICZNE CENTRUM - najlepsze pole w 3D
+                if (game.board[1][1][1] === '') {
+                    game.makeMove(1, 1, 1);
+                    console.log(`🤖 AI w grze #${gameIndex+1} zajmuje strategiczne centrum (1,1,1)`);
+                    return;
+                }
+                
+                // 5. Ostateczność - losowy ruch
+                const empty = game.getEmptyFields();
+                if (empty.length > 0) {
+                    const randomField = empty[Math.floor(Math.random() * empty.length)];
+                    game.makeMove(randomField.x, randomField.y, randomField.z);
+                    console.log(`🤖 AI w grze #${gameIndex+1} gra losowo (ostateczność)`);
+                }
+            }
+            
+            resetAllGames() {
+                this.games.forEach(game => game.newGame());
+                this.totalScore = 0;
+                this.updateTotalScore();
+                console.log('🔄 Wszystkie gry zresetowane');
+            }
+            
+            onGameEnd(gameIndex, winner) {
+                // System punktowy jak w desktop
+                if (winner === 'X') {
+                    this.totalScore += 1;
+                    console.log(`🏆 Gra #${gameIndex+1}: Gracz wygrywa! (+1)`);
+                } else if (winner === 'O') {
+                    this.totalScore -= 1;
+                    console.log(`🤖 Gra #${gameIndex+1}: AI wygrywa! (-1)`);
+                } else {
+                    console.log(`🤝 Gra #${gameIndex+1}: Remis (0)`);
+                }
+                
+                this.updateTotalScore();
+                
+                // Auto-restart po 10 sekundach jak w desktop
+                this.gamesInEndState[gameIndex] = true;
+                this.gameEndTimers[gameIndex] = Date.now();
+                
+                setTimeout(() => {
+                    this.games[gameIndex].newGame();
+                    this.gamesInEndState[gameIndex] = false;
+                    console.log(`🔄 Restartowanie gry #${gameIndex+1}...`);
+                }, 10000);
+            }
+            
+            updateTotalScore() {
+                const scoreElement = document.getElementById('totalScore');
+                const sign = this.totalScore >= 0 ? '+' : '';
+                const color = this.totalScore >= 0 ? '#00ff88' : '#ff4444';
+                
+                scoreElement.textContent = `🏆 Wynik: ${sign}${this.totalScore}`;
+                scoreElement.style.color = color;
+                scoreElement.style.borderColor = color;
+            }
+            
+            updateDebugInfo() {
+                const activeGameIdx = this.gamePositions[2];
+                const aiThinkingCount = this.games.filter(game => game.currentPlayer === 'O' && !game.gameOver).length;
+                
+                document.getElementById('debugInfo').textContent = 
+                    `Aktywna gra: #${activeGameIdx+1} | AI myśli w: ${aiThinkingCount} grach | Wynik: ${this.totalScore >= 0 ? '+' : ''}${this.totalScore}`;
+            }
+            
+            animate() {
+                this.games.forEach(game => game.render());
+                this.updateDebugInfo();
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+        
+        class MultiCube3D {
+            constructor(canvas, gameIndex) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.gameIndex = gameIndex;
+                this.width = canvas.width;
+                this.height = canvas.height;
+                this.isActive = false;
+                
+                // 3D parameters
+                this.rotationX = 0.3;
+                this.rotationY = 0.7;
+                this.rotationZ = 0;
+                this.cubeSize = Math.min(this.width, this.height) * 0.4;
+                this.cameraDistance = 400;
+                
+                // Game logic
+                this.board = Array(3).fill().map(() => 
+                    Array(3).fill().map(() => Array(3).fill(''))
+                );
+                this.currentPlayer = 'X';
+                this.gameOver = false;
+                this.winner = null;
+                this.gameScore = { player: 0, ai: 0 };
+                
+                console.log(`🎮 MultiCube3D #${gameIndex+1} inicjalizowana`);
+            }
+            
+            setActive(active) {
+                this.isActive = active;
+                if (active) {
+                    console.log(`🎯 Gra #${this.gameIndex+1} aktywowana`);
+                }
+            }
+            
+            updateSize(width, height) {
+                this.width = width;
+                this.height = height;
+                this.cubeSize = Math.min(width, height) * 0.4;
+            }
+            
+            handleClick(event) {
+                if (!this.isActive || this.gameOver || this.currentPlayer !== 'X') {
+                    return;
+                }
+                
+                const rect = this.canvas.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+                
+                const field = this.getFieldFromClick(mouseX, mouseY);
+                if (field && this.board[field.z][field.y][field.x] === '') {
+                    this.makeMove(field.x, field.y, field.z);
+                    
+                    // AI ruch po chwili
+                    if (!this.gameOver && this.currentPlayer === 'O') {
+                        setTimeout(() => this.makeAIMove(), 800);
+                    }
+                }
+            }
+            
+            getFieldFromClick(mouseX, mouseY) {
+                const size = this.cubeSize;
+                const odstep = size / 3;
+                
+                let bestField = null;
+                let bestDistance = Infinity;
+                
+                for (let x = 0; x < 3; x++) {
+                    for (let y = 0; y < 3; y++) {
+                        for (let z = 0; z < 3; z++) {
+                            if (this.board[z][y][x] !== '') continue;
+                            
+                            const x3d = -odstep + x * odstep;
+                            const y3d = -odstep + y * odstep;
+                            const z3d = -odstep + z * odstep;
+                            
+                            const projected = this.project3DTo2D(x3d, y3d, z3d);
+                            
+                            const distance = Math.sqrt(
+                                (mouseX - projected.x) ** 2 + 
+                                (mouseY - projected.y) ** 2
+                            );
+                            
+                            if (projected.z > -200 && distance < 30 && distance < bestDistance) {
+                                bestDistance = distance;
+                                bestField = { x, y, z };
+                            }
+                        }
+                    }
+                }
+                
+                return bestField;
+            }
+            
+            makeMove(x, y, z) {
+                if (this.gameOver || this.board[z][y][x] !== '') {
+                    return false;
+                }
+                
+                this.board[z][y][x] = this.currentPlayer;
+                
+                if (this.checkWinner()) {
+                    this.gameOver = true;
+                    this.winner = this.currentPlayer;
+                    
+                    if (this.currentPlayer === 'X') {
+                        this.gameScore.player++;
+                    } else {
+                        this.gameScore.ai++;
+                    }
+                    
+                    // Powiadom manager
+                    window.multiCubeManager?.onGameEnd(this.gameIndex, this.winner);
+                    
+                } else if (this.isBoardFull()) {
+                    this.gameOver = true;
+                    this.winner = null;
+                    window.multiCubeManager?.onGameEnd(this.gameIndex, null);
+                    
+                } else {
+                    this.currentPlayer = this.currentPlayer === 'X' ? 'O' : 'X';
+                }
+                
+                return true;
+            }
+            
+            makeAIMove() {
+                if (this.gameOver || this.currentPlayer !== 'O') return;
+                
+                // 1. Spróbuj wygrać (najwyższy priorytet)
+                let move = this.findBestMove('O');
+                if (move) {
+                    this.makeMove(move.x, move.y, move.z);
+                    console.log(`🤖 AI w grze #${this.gameIndex+1} wygrywa natychmiast!`);
+                    return;
+                }
+                
+                // 2. Zablokuj gracza przed wygraną (krytyczne!)
+                move = this.findBestMove('X');
+                if (move) {
+                    this.makeMove(move.x, move.y, move.z);
+                    console.log(`🤖 AI w grze #${this.gameIndex+1} blokuje wygraną gracza!`);
+                    return;
+                }
+                
+                // 3. MINIMAX - najlepszy ruch strategiczny (myślenie 2-3 ruchy naprzód)
+                move = this.findBestMoveWithMinimax();
+                if (move) {
+                    this.makeMove(move.x, move.y, move.z);
+                    console.log(`🤖 AI w grze #${this.gameIndex+1} gra strategicznie (Minimax) - ocena: ${move.score}`);
+                    return;
+                }
+                
+                // 4. STRATEGICZNE CENTRUM - najlepsze pole w 3D
+                if (this.board[1][1][1] === '') {
+                    this.makeMove(1, 1, 1);
+                    console.log(`🤖 AI w grze #${this.gameIndex+1} zajmuje strategiczne centrum (1,1,1)`);
+                    return;
+                }
+                
+                // 5. Ostateczność - losowy ruch
+                const empty = this.getEmptyFields();
+                if (empty.length > 0) {
+                    const move = empty[Math.floor(Math.random() * empty.length)];
+                    this.makeMove(move.x, move.y, move.z);
+                    console.log(`🤖 AI w grze #${this.gameIndex+1} gra losowo (ostateczność)`);
+                }
+            }
+            
+            findBestMove(player) {
+                const empty = this.getEmptyFields();
+                
+                for (const field of empty) {
+                    this.board[field.z][field.y][field.x] = player;
+                    const wins = this.checkWinner();
+                    this.board[field.z][field.y][field.x] = '';
+                    
+                    if (wins) return field;
+                }
+                
+                return null;
+            }
+            
+            // MINIMAX ALGORYTM - myślenie 2-3 ruchy naprzód
+            findBestMoveWithMinimax() {
+                const emptyFields = this.getEmptyFields();
+                if (emptyFields.length === 0) return null;
+                
+                let bestMove = null;
+                let bestScore = -Infinity;
+                
+                // Ograniczamy głębokość w zależności od liczby wolnych pól (wydajność)
+                const depth = emptyFields.length > 15 ? 2 : 3;
+                
+                for (const field of emptyFields) {
+                    // Symuluj ruch AI
+                    this.board[field.z][field.y][field.x] = 'O';
+                    
+                    // Oblicz wynik minimax
+                    const score = this.minimax(depth - 1, false, -Infinity, Infinity);
+                    
+                    // Cofnij ruch
+                    this.board[field.z][field.y][field.x] = '';
+                    
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = { ...field, score };
+                    }
+                }
+                
+                return bestMove;
+            }
+            
+            // MINIMAX z Alpha-Beta Pruning
+            minimax(depth, isMaximizing, alpha, beta) {
+                // Sprawdź stan gry
+                const winner = this.checkWinnerForMinimax();
+                if (winner === 'O') return 100 + depth; // AI wygrywa - preferuj szybsze wygrane
+                if (winner === 'X') return -100 - depth; // Gracz wygrywa
+                
+                const emptyFields = this.getEmptyFields();
+                if (depth === 0 || emptyFields.length === 0) {
+                    // Oceń pozycję
+                    return this.evaluateBoard();
+                }
+                
+                if (isMaximizing) {
+                    // Tura AI (maksymalizuje)
+                    let maxEval = -Infinity;
+                    
+                    for (const field of emptyFields) {
+                        this.board[field.z][field.y][field.x] = 'O';
+                        const evaluation = this.minimax(depth - 1, false, alpha, beta);
+                        this.board[field.z][field.y][field.x] = '';
+                        
+                        maxEval = Math.max(maxEval, evaluation);
+                        alpha = Math.max(alpha, evaluation);
+                        
+                        if (beta <= alpha) break; // Alpha-beta pruning
+                    }
+                    return maxEval;
+                    
+                } else {
+                    // Tura gracza (minimalizuje)
+                    let minEval = Infinity;
+                    
+                    for (const field of emptyFields) {
+                        this.board[field.z][field.y][field.x] = 'X';
+                        const evaluation = this.minimax(depth - 1, true, alpha, beta);
+                        this.board[field.z][field.y][field.x] = '';
+                        
+                        minEval = Math.min(minEval, evaluation);
+                        beta = Math.min(beta, evaluation);
+                        
+                        if (beta <= alpha) break; // Alpha-beta pruning
+                    }
+                    return minEval;
+                }
+            }
+            
+            // SPRAWDZANIE WYGRANEJ dla minimax (szybsza wersja)
+            checkWinnerForMinimax() {
+                const lines = this.getAllWinningLines();
+                
+                for (const line of lines) {
+                    const [pos1, pos2, pos3] = line;
+                    
+                    const cell1 = this.board[pos1[2]][pos1[1]][pos1[0]];
+                    const cell2 = this.board[pos2[2]][pos2[1]][pos2[0]];
+                    const cell3 = this.board[pos3[2]][pos3[1]][pos3[0]];
+                    
+                    if (cell1 && cell1 === cell2 && cell2 === cell3) {
+                        return cell1; // Zwróć zwycięzcę ('X' lub 'O')
+                    }
+                }
+                
+                return null; // Brak zwycięzcy
+            }
+            
+            // OCENA CAŁEJ PLANSZY
+            evaluateBoard() {
+                let score = 0;
+                const lines = this.getAllWinningLines();
+                
+                for (const line of lines) {
+                    let aiCount = 0;
+                    let playerCount = 0;
+                    let emptyCount = 0;
+                    
+                    for (const pos of line) {
+                        const symbol = this.board[pos[2]][pos[1]][pos[0]];
+                        if (symbol === 'O') aiCount++;
+                        else if (symbol === 'X') playerCount++;
+                        else emptyCount++;
+                    }
+                    
+                    // Oceń linię
+                    if (playerCount === 0) { // Linia nie blokowana przez gracza
+                        if (aiCount === 2) score += 20;      // AI prawie wygrywa
+                        else if (aiCount === 1) score += 2;  // AI ma pozycję
+                    }
+                    
+                    if (aiCount === 0) { // Linia nie blokowana przez AI
+                        if (playerCount === 2) score -= 15;  // Gracz prawie wygrywa (zła sytuacja)
+                        else if (playerCount === 1) score -= 1; // Gracz ma pozycję
+                    }
+                }
+                
+                // Bonus za centrum
+                if (this.board[1][1][1] === 'O') score += 5;
+                if (this.board[1][1][1] === 'X') score -= 3;
+                
+                return score;
+            }
+            
+            getEmptyFields() {
+                const empty = [];
+                for (let x = 0; x < 3; x++) {
+                    for (let y = 0; y < 3; y++) {
+                        for (let z = 0; z < 3; z++) {
+                            if (this.board[z][y][x] === '') {
+                                empty.push({ x, y, z });
+                            }
+                        }
+                    }
+                }
+                return empty;
+            }
+            
+            isBoardFull() {
+                return this.getEmptyFields().length === 0;
+            }
+            
+            checkWinner() {
+                const player = this.currentPlayer;
+                const lines = this.getAllWinningLines();
+                
+                for (const line of lines) {
+                    const [pos1, pos2, pos3] = line;
+                    
+                    const cell1 = this.board[pos1[2]][pos1[1]][pos1[0]];
+                    const cell2 = this.board[pos2[2]][pos2[1]][pos2[0]];
+                    const cell3 = this.board[pos3[2]][pos3[1]][pos3[0]];
+                    
+                    if (cell1 && cell1 === cell2 && cell2 === cell3 && cell1 === player) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            
+            getAllWinningLines() {
+                const lines = [];
+                
+                // Wszystkie 49 linii wygrywających
+                for (let z = 0; z < 3; z++) {
+                    for (let y = 0; y < 3; y++) {
+                        lines.push([[0,y,z], [1,y,z], [2,y,z]]);
+                    }
+                }
+                
+                for (let z = 0; z < 3; z++) {
+                    for (let x = 0; x < 3; x++) {
+                        lines.push([[x,0,z], [x,1,z], [x,2,z]]);
+                    }
+                }
+                
+                for (let y = 0; y < 3; y++) {
+                    for (let x = 0; x < 3; x++) {
+                        lines.push([[x,y,0], [x,y,1], [x,y,2]]);
+                    }
+                }
+                
+                for (let z = 0; z < 3; z++) {
+                    lines.push([[0,0,z], [1,1,z], [2,2,z]]);
+                    lines.push([[2,0,z], [1,1,z], [0,2,z]]);
+                }
+                
+                for (let x = 0; x < 3; x++) {
+                    lines.push([[x,0,0], [x,1,1], [x,2,2]]);
+                    lines.push([[x,2,0], [x,1,1], [x,0,2]]);
+                }
+                
+                for (let y = 0; y < 3; y++) {
+                    lines.push([[0,y,0], [1,y,1], [2,y,2]]);
+                    lines.push([[2,y,0], [1,y,1], [0,y,2]]);
+                }
+                
+                lines.push([[0,0,0], [1,1,1], [2,2,2]]);
+                lines.push([[2,0,0], [1,1,1], [0,2,2]]);
+                lines.push([[0,2,0], [1,1,1], [2,0,2]]);
+                lines.push([[2,2,0], [1,1,1], [0,0,2]]);
+                
+                return lines;
+            }
+            
+            newGame() {
+                this.board = Array(3).fill().map(() => 
+                    Array(3).fill().map(() => Array(3).fill(''))
+                );
+                this.currentPlayer = 'X';
+                this.gameOver = false;
+                this.winner = null;
+                
+                console.log(`🔄 Gra #${this.gameIndex+1} zresetowana`);
+            }
+            
+            rotatePoint(x, y, z) {
+                let cosX = Math.cos(this.rotationX);
+                let sinX = Math.sin(this.rotationX);
+                let y1 = y * cosX - z * sinX;
+                let z1 = y * sinX + z * cosX;
+                
+                let cosY = Math.cos(this.rotationY);
+                let sinY = Math.sin(this.rotationY);
+                let x2 = x * cosY + z1 * sinY;
+                let z2 = -x * sinY + z1 * cosY;
+                
+                let cosZ = Math.cos(this.rotationZ);
+                let sinZ = Math.sin(this.rotationZ);
+                let x3 = x2 * cosZ - y1 * sinZ;
+                let y3 = x2 * sinZ + y1 * cosZ;
+                
+                return { x: x3, y: y3, z: z2 };
+            }
+            
+            project3DTo2D(x, y, z) {
+                const rotated = this.rotatePoint(x, y, z);
+                const perspective = this.cameraDistance / (this.cameraDistance + rotated.z);
+                
+                const screenX = this.width / 2 + rotated.x * perspective;
+                const screenY = this.height / 2 + rotated.y * perspective;
+                
+                return { 
+                    x: screenX, 
+                    y: screenY, 
+                    z: rotated.z,
+                    perspective: perspective 
+                };
+            }
+            
+            drawLine3D(x1, y1, z1, x2, y2, z2, color = 'white', lineWidth = 2) {
+                const p1 = this.project3DTo2D(x1, y1, z1);
+                const p2 = this.project3DTo2D(x2, y2, z2);
+                
+                this.ctx.strokeStyle = color;
+                this.ctx.lineWidth = lineWidth;
+                this.ctx.setLineDash([]);
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(p1.x, p1.y);
+                this.ctx.lineTo(p2.x, p2.y);
+                this.ctx.stroke();
+            }
+            
+            render() {
+                // Clear
+                this.ctx.fillStyle = '#000000';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+                
+                const size = this.cubeSize;
+                const odstep = size / 3;
+                const lineColor = this.isActive ? '#FFFFFF' : '#888888';
+                
+                // Linie szkieletu
+                for (let z = 0; z < 3; z++) {
+                    for (let y = 0; y < 3; y++) {
+                        const z3d = -odstep + z * odstep;
+                        const y3d = -odstep + y * odstep;
+                        
+                        this.drawLine3D(-odstep, y3d, z3d, odstep, y3d, z3d, lineColor, 1);
+                    }
+                }
+                
+                for (let z = 0; z < 3; z++) {
+                    for (let x = 0; x < 3; x++) {
+                        const z3d = -odstep + z * odstep;
+                        const x3d = -odstep + x * odstep;
+                        
+                        this.drawLine3D(x3d, -odstep, z3d, x3d, odstep, z3d, lineColor, 1);
+                    }
+                }
+                
+                for (let y = 0; y < 3; y++) {
+                    for (let x = 0; x < 3; x++) {
+                        const y3d = -odstep + y * odstep;
+                        const x3d = -odstep + x * odstep;
+                        
+                        this.drawLine3D(x3d, y3d, -odstep, x3d, y3d, odstep, lineColor, 1);
+                    }
+                }
+                
+                // 27 kwadracików
+                for (let x = 0; x < 3; x++) {
+                    for (let y = 0; y < 3; y++) {
+                        for (let z = 0; z < 3; z++) {
+                            const x3d = -odstep + x * odstep;
+                            const y3d = -odstep + y * odstep;
+                            const z3d = -odstep + z * odstep;
+                            
+                            const projected = this.project3DTo2D(x3d, y3d, z3d);
+                            
+                            if (projected.z > -200) {
+                                const squareSize = (this.isActive ? 15 : 10) * projected.perspective;
+                                
+                                // Kwadrat
+                                this.ctx.fillStyle = this.isActive ? 'rgba(80,80,100,0.8)' : 'rgba(60,60,80,0.6)';
+                                this.ctx.fillRect(
+                                    projected.x - squareSize/2,
+                                    projected.y - squareSize/2,
+                                    squareSize,
+                                    squareSize
+                                );
+                                
+                                // Ramka
+                                this.ctx.strokeStyle = this.isActive ? 'rgba(220,220,220,0.8)' : 'rgba(150,150,150,0.5)';
+                                this.ctx.lineWidth = 1;
+                                this.ctx.strokeRect(
+                                    projected.x - squareSize/2,
+                                    projected.y - squareSize/2,
+                                    squareSize,
+                                    squareSize
+                                );
+                                
+                                // Symbol
+                                const symbol = this.board[z][y][x];
+                                if (symbol) {
+                                    this.ctx.fillStyle = symbol === 'X' ? '#FF9650' : '#32A0FF';
+                                    this.ctx.font = `bold ${Math.floor((this.isActive ? 16 : 12) * projected.perspective)}px Arial`;
+                                    this.ctx.textAlign = 'center';
+                                    this.ctx.fillText(symbol, projected.x, projected.y + 4 * projected.perspective);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Status gry
+                this.ctx.fillStyle = this.isActive ? 'white' : '#888';
+                this.ctx.font = this.isActive ? '14px Arial' : '12px Arial';
+                this.ctx.textAlign = 'left';
+                
+                // Wynik lokalny
+                this.ctx.fillText(
+                    `${this.gameScore.player}-${this.gameScore.ai}`, 
+                    10, this.height - 40
+                );
+                
+                // Status
+                if (this.gameOver) {
+                    this.ctx.fillStyle = this.winner === 'X' ? '#00ff88' : 
+                                       this.winner === 'O' ? '#ff4444' : '#ffaa00';
+                    this.ctx.font = this.isActive ? 'bold 16px Arial' : 'bold 12px Arial';
+                    this.ctx.textAlign = 'center';
+                    
+                    const statusText = this.winner === 'X' ? 'WYGRANA!' : 
+                                      this.winner === 'O' ? 'AI WYGRYWA' : 'REMIS';
+                    this.ctx.fillText(statusText, this.width/2, this.height - 60);
+                    
+                } else if (this.isActive) {
+                    this.ctx.fillStyle = this.currentPlayer === 'X' ? '#00ff88' : '#ff4444';
+                    this.ctx.font = '14px Arial';
+                    this.ctx.textAlign = 'center';
+                    
+                    const playerText = this.currentPlayer === 'X' ? 'Twoja kolej!' : 'AI myśli...';
+                    this.ctx.fillText(playerText, this.width/2, this.height - 20);
+                }
+            }
+        }
+        
+        // Inicjalizacja
+        window.onload = () => {
+            window.multiCubeManager = new MultiCubeManager();
+            console.log('🎮 Multi-Cube Manager gotowy!');
+            console.log('🎯 Kliknij w gry w tle aby je aktywować!');
+        };
+    </script>
+</body>
+</html>
