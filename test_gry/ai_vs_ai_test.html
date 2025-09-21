@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 Test AI vs AI - Teoria Gier</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: white;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .test-controls {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .results-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .result-panel {
+            background: #2d2d2d;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        
+        .stats-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        .stats-table th,
+        .stats-table td {
+            border: 1px solid #444;
+            padding: 8px;
+            text-align: center;
+        }
+        
+        .stats-table th {
+            background: #444;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #45a049;
+        }
+        
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #444;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #45a049);
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        .log {
+            background: #1a1a1a;
+            border: 1px solid #444;
+            padding: 10px;
+            height: 200px;
+            overflow-y: scroll;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🧪 Test AI vs AI - WZMOCNIONE AI - Teoria Gier</h1>
+        <p>Eksperyment: Czy NOWE mocniejsze AI (4-6 ruchów, opening book, priorytetyzacja) zmienia balans gry?</p>
+        
+        <div class="test-controls">
+            <h2>🎮 Kontrola Testów</h2>
+            <button id="normalTestBtn">🎯 Test Normalny Start (500 gier)</button>
+            <button id="randomTestBtn">🎲 Test Losowy Start (500 gier)</button>
+            <button id="bothTestsBtn">🔬 Oba Testy (1000 gier)</button>
+            <button id="clearBtn">🗑️ Wyczyść Wyniki</button>
+            
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div id="progressText">Gotowy do testów</div>
+        </div>
+        
+        <div class="results-grid">
+            <div class="result-panel">
+            <h3>🎯 Test Normalny Start</h3>
+            <p>AI #1 (X): WZMOCNIONE - opening book, 4-6 ruchów, priorytetyzacja</p>                <table class="stats-table">
+                    <tr>
+                        <th>Wynik</th>
+                        <th>Liczba</th>
+                        <th>%</th>
+                    </tr>
+                    <tr>
+                        <td>AI #1 (X) Wygrane</td>
+                        <td id="normal-x-wins">0</td>
+                        <td id="normal-x-percent">0%</td>
+                    </tr>
+                    <tr>
+                        <td>AI #2 (O) Wygrane</td>
+                        <td id="normal-o-wins">0</td>
+                        <td id="normal-o-percent">0%</td>
+                    </tr>
+                    <tr>
+                        <td>Remisy</td>
+                        <td id="normal-draws">0</td>
+                        <td id="normal-draws-percent">0%</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Razem</strong></td>
+                        <td id="normal-total">0</td>
+                        <td>100%</td>
+                    </tr>
+                </table>
+                
+                <div class="log" id="normalLog"></div>
+            </div>
+            
+            <div class="result-panel">
+            <h3>🎲 Test Losowy Start</h3>
+            <p>AI #1 (X): WZMOCNIONE ale dostaje losowe pierwsze pole</p>                <table class="stats-table">
+                    <tr>
+                        <th>Wynik</th>
+                        <th>Liczba</th>
+                        <th>%</th>
+                    </tr>
+                    <tr>
+                        <td>AI #1 (X) Wygrane</td>
+                        <td id="random-x-wins">0</td>
+                        <td id="random-x-percent">0%</td>
+                    </tr>
+                    <tr>
+                        <td>AI #2 (O) Wygrane</td>
+                        <td id="random-o-wins">0</td>
+                        <td id="random-o-percent">0%</td>
+                    </tr>
+                    <tr>
+                        <td>Remisy</td>
+                        <td id="random-draws">0</td>
+                        <td id="random-draws-percent">0%</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Razem</strong></td>
+                        <td id="random-total">0</td>
+                        <td>100%</td>
+                    </tr>
+                </table>
+                
+                <div class="log" id="randomLog"></div>
+            </div>
+        </div>
+        
+        <div class="result-panel" style="margin-top: 20px;">
+            <h3>📊 Porównanie i Wnioski</h3>
+            <div id="analysis">
+                <p>Uruchom testy aby zobaczyć analizę porównawczą...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // KLASA GICZNY DO TESTÓW - uproszczona bez renderowania
+        class TestGame3D {
+            constructor() {
+                this.reset();
+            }
+            
+            reset() {
+                this.board = Array(3).fill().map(() => 
+                    Array(3).fill().map(() => Array(3).fill(''))
+                );
+                this.currentPlayer = 'X';
+                this.gameOver = false;
+                this.winner = null;
+                this.moveCount = 0;
+            }
+            
+            makeMove(x, y, z) {
+                if (this.gameOver || this.board[z][y][x] !== '') {
+                    return false;
+                }
+                
+                this.board[z][y][x] = this.currentPlayer;
+                this.moveCount++;
+                
+                if (this.checkWinner()) {
+                    this.gameOver = true;
+                    this.winner = this.currentPlayer;
+                } else if (this.isBoardFull()) {
+                    this.gameOver = true;
+                    this.winner = null; // Remis
+                } else {
+                    this.currentPlayer = this.currentPlayer === 'X' ? 'O' : 'X';
+                }
+                
+                return true;
+            }
+            
+            // WZMOCNIONE AI - jak w multi_kostka.html
+            makeAIMove(forceRandomFirst = false) {
+                if (this.gameOver) return null;
+                
+                // OPENING BOOK - pierwsze ruchy strategiczne
+                if (this.moveCount <= 2 && !forceRandomFirst) {
+                    const openingMove = this.getOpeningMove();
+                    if (openingMove) {
+                        this.makeMove(openingMove.x, openingMove.y, openingMove.z);
+                        return openingMove;
+                    }
+                }
+                
+                // Jeśli to pierwszy ruch i forceRandomFirst = true
+                if (forceRandomFirst && this.moveCount === 0 && this.currentPlayer === 'X') {
+                    const emptyFields = this.getEmptyFields();
+                    const randomField = emptyFields[Math.floor(Math.random() * emptyFields.length)];
+                    this.makeMove(randomField.x, randomField.y, randomField.z);
+                    return randomField;
+                }
+                
+                // 1. Spróbuj wygrać (najwyższy priorytet)
+                let move = this.findBestMove(this.currentPlayer);
+                if (move) {
+                    this.makeMove(move.x, move.y, move.z);
+                    return move;
+                }
+                
+                // 2. Zablokuj przeciwnika (krytyczne!)
+                const opponent = this.currentPlayer === 'X' ? 'O' : 'X';
+                move = this.findBestMove(opponent);
+                if (move) {
+                    this.makeMove(move.x, move.y, move.z);
+                    return move;
+                }
+                
+                // 3. MINIMAX z priorytetyzacją - strategiczny
+                move = this.findBestMoveWithMinimax();
+                if (move) {
+                    this.makeMove(move.x, move.y, move.z);
+                    return move;
+                }
+                
+                // 4. Centrum strategiczne
+                if (this.board[1][1][1] === '') {
+                    this.makeMove(1, 1, 1);
+                    return {x: 1, y: 1, z: 1};
+                }
+                
+                // 5. Ostateczność - losowy ruch
+                const emptyFields = this.getEmptyFields();
+                if (emptyFields.length > 0) {
+                    const randomField = emptyFields[Math.floor(Math.random() * emptyFields.length)];
+                    this.makeMove(randomField.x, randomField.y, randomField.z);
+                    return randomField;
+                }
+                
+                return null;
+            }
+            
+            // OPENING BOOK - strategiczne pierwsze ruchy
+            getOpeningMove() {
+                const empty = this.getEmptyFields();
+                const moveCount = 27 - empty.length;
+                
+                if (moveCount === 0) {
+                    // Pierwszy ruch AI - zawsze centrum
+                    return { x: 1, y: 1, z: 1 };
+                }
+                
+                if (moveCount === 1) {
+                    // Drugi ruch - odpowiedź na ruch gracza
+                    
+                    // Jeśli gracz zajął centrum - zajmij narożnik
+                    if (this.board[1][1][1] === 'X') {
+                        const corners = [
+                            {x: 0, y: 0, z: 0}, {x: 2, y: 2, z: 2},
+                            {x: 0, y: 0, z: 2}, {x: 2, y: 2, z: 0}
+                        ];
+                        return corners[Math.floor(Math.random() * corners.length)];
+                    }
+                    
+                    // Jeśli gracz zajął narożnik - zajmij centrum
+                    const corners = [[0,0,0], [0,0,2], [0,2,0], [0,2,2], [2,0,0], [2,0,2], [2,2,0], [2,2,2]];
+                    for (const corner of corners) {
+                        if (this.board[corner[2]][corner[1]][corner[0]] === 'X' && this.board[1][1][1] === '') {
+                            return { x: 1, y: 1, z: 1 };
+                        }
+                    }
+                    
+                    // Fallback - centrum lub najlepszy narożnik
+                    if (this.board[1][1][1] === '') {
+                        return { x: 1, y: 1, z: 1 };
+                    }
+                    
+                    const availableCorners = corners.filter(c => 
+                        this.board[c[2]][c[1]][c[0]] === ''
+                    );
+                    if (availableCorners.length > 0) {
+                        const corner = availableCorners[0];
+                        return { x: corner[0], y: corner[1], z: corner[2] };
+                    }
+                }
+                
+                return null; // Po 2 ruchach używaj normalnej logiki
+            }
+            
+            // WZMOCNIONY Minimax - adaptacyjna głębokość i priorytetyzacja
+            findBestMoveWithMinimax() {
+                const emptyFields = this.getEmptyFields();
+                if (emptyFields.length === 0) return null;
+                
+                let bestMove = null;
+                let bestScore = -Infinity;
+                
+                // ADAPTACYJNA GŁĘBOKOŚĆ - mocniejsze AI
+                let depth;
+                if (emptyFields.length > 20) depth = 2;      // Początek gry
+                else if (emptyFields.length > 15) depth = 3; // Środek gry
+                else if (emptyFields.length > 10) depth = 4; // Późny środek
+                else depth = 5;                              // Endgame - głębsza analiza
+                
+                // Priorytetyzacja ruchów dla lepszej wydajności
+                const prioritizedMoves = this.prioritizeMoves(emptyFields);
+                
+                // Testuj tylko najlepsze ruchy (maksymalnie 12 dla wydajności)
+                const movesToTest = prioritizedMoves.slice(0, Math.min(12, prioritizedMoves.length));
+                
+                for (const field of movesToTest) {
+                    this.board[field.z][field.y][field.x] = this.currentPlayer;
+                    const score = this.minimax(depth - 1, false, -Infinity, Infinity);
+                    this.board[field.z][field.y][field.x] = '';
+                    
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = field;
+                    }
+                }
+                
+                return bestMove;
+            }
+            
+            // PRIORYTETYZACJA RUCHÓW - najważniejsze pierwsze
+            prioritizeMoves(fields) {
+                return fields.map(field => ({
+                    ...field,
+                    priority: this.evaluateMoveImportance(field)
+                })).sort((a, b) => b.priority - a.priority);
+            }
+            
+            // OCENA WAŻNOŚCI RUCHU
+            evaluateMoveImportance(field) {
+                let priority = 0;
+                const {x, y, z} = field;
+                
+                // 1. BONUS POZYCYJNY
+                // Centrum (1,1,1) - najważniejsze pole
+                if (x === 1 && y === 1 && z === 1) priority += 50;
+                
+                // Centrum ścian - bardzo ważne  
+                if ((x === 1 && y === 1 && (z === 0 || z === 2)) ||
+                    (x === 1 && z === 1 && (y === 0 || y === 2)) ||
+                    (y === 1 && z === 1 && (x === 0 || x === 2))) {
+                    priority += 30;
+                }
+                
+                // Narożniki - kontrola przekątnych
+                if ((x === 0 || x === 2) && (y === 0 || y === 2) && (z === 0 || z === 2)) {
+                    priority += 25;
+                }
+                
+                // 2. ANALIZA LINII - ile linii wpływa na to pole
+                const affectedLines = this.getAffectedLines(field);
+                priority += affectedLines * 3;
+                
+                // 3. THREAT ANALYSIS - czy ten ruch blokuje/tworzy zagrożenia
+                this.board[z][y][x] = this.currentPlayer;
+                const myThreats = this.countThreats(this.currentPlayer);
+                this.board[z][y][x] = '';
+                
+                const opponent = this.currentPlayer === 'X' ? 'O' : 'X';
+                this.board[z][y][x] = opponent;
+                const blockedThreats = this.countThreats(opponent);
+                this.board[z][y][x] = '';
+                
+                priority += myThreats * 15;        // Tworzenie zagrożeń
+                priority += blockedThreats * 20;   // Blokowanie jeszcze ważniejsze
+                
+                return priority;
+            }
+            
+            // ZLICZ ZAGROŻENIA (2 w linii + 1 wolne)
+            countThreats(player) {
+                let threats = 0;
+                const lines = this.getAllWinningLines();
+                
+                for (const line of lines) {
+                    let playerCount = 0;
+                    let emptyCount = 0;
+                    
+                    for (const pos of line) {
+                        const cell = this.board[pos[2]][pos[1]][pos[0]];
+                        if (cell === player) playerCount++;
+                        else if (cell === '') emptyCount++;
+                    }
+                    
+                    // 2 w linii + 1 wolne = zagrożenie
+                    if (playerCount === 2 && emptyCount === 1) {
+                        threats++;
+                    }
+                }
+                
+                return threats;
+            }
+            
+            // POLICZ LINIE WPŁYWAJĄCE NA POLE
+            getAffectedLines(field) {
+                const lines = this.getAllWinningLines();
+                let count = 0;
+                
+                for (const line of lines) {
+                    for (const pos of line) {
+                        if (pos[0] === field.x && pos[1] === field.y && pos[2] === field.z) {
+                            count++;
+                            break;
+                        }
+                    }
+                }
+                
+                return count;
+            }
+            
+            // WZMOCNIONY MINIMAX z Alpha-Beta Pruning
+            minimax(depth, isMaximizing, alpha, beta) {
+                const winner = this.checkWinnerForMinimax();
+                if (winner === this.currentPlayer) return 1000 + depth;        // Moja wygrana
+                if (winner && winner !== this.currentPlayer) return -1000 - depth; // Wygrana przeciwnika
+                
+                const emptyFields = this.getEmptyFields();
+                if (depth === 0 || emptyFields.length === 0) {
+                    return this.evaluateBoardAdvanced(); // Użyj zaawansowanej oceny
+                }
+                
+                // Priorytetyzacja ruchów na każdym poziomie dla większej wydajności
+                const prioritizedFields = emptyFields.length > 8 ? 
+                    this.prioritizeMoves(emptyFields).slice(0, 8) : 
+                    emptyFields;
+                
+                if (isMaximizing) {
+                    let maxEval = -Infinity;
+                    const currentPlayer = this.currentPlayer;
+                    
+                    for (const field of prioritizedFields) {
+                        this.board[field.z][field.y][field.x] = currentPlayer;
+                        const evaluation = this.minimax(depth - 1, false, alpha, beta);
+                        this.board[field.z][field.y][field.x] = '';
+                        
+                        maxEval = Math.max(maxEval, evaluation);
+                        alpha = Math.max(alpha, evaluation);
+                        if (beta <= alpha) break; // Alpha-beta pruning
+                    }
+                    return maxEval;
+                } else {
+                    let minEval = Infinity;
+                    const opponent = this.currentPlayer === 'X' ? 'O' : 'X';
+                    
+                    for (const field of prioritizedFields) {
+                        this.board[field.z][field.y][field.x] = opponent;
+                        const evaluation = this.minimax(depth - 1, true, alpha, beta);
+                        this.board[field.z][field.y][field.x] = '';
+                        
+                        minEval = Math.min(minEval, evaluation);
+                        beta = Math.min(beta, evaluation);
+                        if (beta <= alpha) break; // Alpha-beta pruning
+                    }
+                    return minEval;
+                }
+            }
+            
+            checkWinnerForMinimax() {
+                const lines = this.getAllWinningLines();
+                for (const line of lines) {
+                    const [pos1, pos2, pos3] = line;
+                    const cell1 = this.board[pos1[2]][pos1[1]][pos1[0]];
+                    const cell2 = this.board[pos2[2]][pos2[1]][pos2[0]];
+                    const cell3 = this.board[pos3[2]][pos3[1]][pos3[0]];
+                    
+                    if (cell1 && cell1 === cell2 && cell2 === cell3) {
+                        return cell1;
+                    }
+                }
+                return null;
+            }
+            
+            // PODSTAWOWA OCENA PLANSZY
+            evaluateBoard() {
+                let score = 0;
+                const lines = this.getAllWinningLines();
+                
+                for (const line of lines) {
+                    let myCount = 0;
+                    let opponentCount = 0;
+                    
+                    for (const pos of line) {
+                        const symbol = this.board[pos[2]][pos[1]][pos[0]];
+                        if (symbol === this.currentPlayer) myCount++;
+                        else if (symbol !== '') opponentCount++;
+                    }
+                    
+                    if (opponentCount === 0) {
+                        if (myCount === 2) score += 20;
+                        else if (myCount === 1) score += 2;
+                    }
+                    
+                    if (myCount === 0) {
+                        if (opponentCount === 2) score -= 15;
+                        else if (opponentCount === 1) score -= 1;
+                    }
+                }
+                
+                // Bonus za centrum
+                if (this.board[1][1][1] === this.currentPlayer) score += 5;
+                
+                return score;
+            }
+            
+            // ZAAWANSOWANA OCENA PLANSZY - jak w multi_kostka.html
+            evaluateBoardAdvanced() {
+                let score = 0;
+                const lines = this.getAllWinningLines();
+                const myPlayer = this.currentPlayer;
+                const opponent = myPlayer === 'X' ? 'O' : 'X';
+                
+                // 1. ANALIZA LINII z wagami
+                for (const line of lines) {
+                    let myCount = 0;
+                    let opponentCount = 0;
+                    let emptyCount = 0;
+                    let lineValue = 1;
+                    
+                    // Sprawdź czy linia zawiera centrum
+                    let hasCenter = line.some(pos => pos[0] === 1 && pos[1] === 1 && pos[2] === 1);
+                    if (hasCenter) lineValue = 2; // Linie przez centrum są ważniejsze
+                    
+                    // Sprawdź czy to przekątna główna
+                    let isDiagonal = line.every(pos => pos[0] === pos[1] && pos[1] === pos[2]);
+                    if (isDiagonal) lineValue = 3; // Przekątne główne najważniejsze
+                    
+                    for (const pos of line) {
+                        const symbol = this.board[pos[2]][pos[1]][pos[0]];
+                        if (symbol === myPlayer) myCount++;
+                        else if (symbol === opponent) opponentCount++;
+                        else emptyCount++;
+                    }
+                    
+                    // Ocena linii z wagami
+                    if (opponentCount === 0) { // Moja linia
+                        if (myCount === 2) score += 50 * lineValue;  // Prawie wygrana!
+                        else if (myCount === 1) score += 5 * lineValue;  // Mam pozycję
+                    }
+                    
+                    if (myCount === 0) { // Linia przeciwnika
+                        if (opponentCount === 2) score -= 45 * lineValue; // NIEBEZPIECZEŃSTWO!
+                        else if (opponentCount === 1) score -= 3 * lineValue; // Przeciwnik ma pozycję
+                    }
+                }
+                
+                // 2. BONUSY POZYCYJNE
+                // Centrum absolutne
+                if (this.board[1][1][1] === myPlayer) score += 30;
+                else if (this.board[1][1][1] === opponent) score -= 20;
+                
+                // Centra ścian - kontrola 3D
+                const facesCenters = [[1,1,0], [1,1,2], [1,0,1], [1,2,1], [0,1,1], [2,1,1]];
+                for (const center of facesCenters) {
+                    if (this.board[center[2]][center[1]][center[0]] === myPlayer) score += 15;
+                    else if (this.board[center[2]][center[1]][center[0]] === opponent) score -= 10;
+                }
+                
+                // Narożniki - kontrola przekątnych  
+                const corners = [[0,0,0], [0,0,2], [0,2,0], [0,2,2], [2,0,0], [2,0,2], [2,2,0], [2,2,2]];
+                for (const corner of corners) {
+                    if (this.board[corner[2]][corner[1]][corner[0]] === myPlayer) score += 8;
+                    else if (this.board[corner[2]][corner[1]][corner[0]] === opponent) score -= 5;
+                }
+                
+                return score;
+            }
+            
+            findBestMove(player) {
+                const emptyFields = this.getEmptyFields();
+                
+                for (const field of emptyFields) {
+                    this.board[field.z][field.y][field.x] = player;
+                    const wins = this.checkWinner();
+                    this.board[field.z][field.y][field.x] = '';
+                    
+                    if (wins) return field;
+                }
+                
+                return null;
+            }
+            
+            getEmptyFields() {
+                const empty = [];
+                for (let x = 0; x < 3; x++) {
+                    for (let y = 0; y < 3; y++) {
+                        for (let z = 0; z < 3; z++) {
+                            if (this.board[z][y][x] === '') {
+                                empty.push({ x, y, z });
+                            }
+                        }
+                    }
+                }
+                return empty;
+            }
+            
+            isBoardFull() {
+                return this.getEmptyFields().length === 0;
+            }
+            
+            checkWinner() {
+                const lines = this.getAllWinningLines();
+                
+                for (const line of lines) {
+                    const [pos1, pos2, pos3] = line;
+                    const cell1 = this.board[pos1[2]][pos1[1]][pos1[0]];
+                    const cell2 = this.board[pos2[2]][pos2[1]][pos2[0]];
+                    const cell3 = this.board[pos3[2]][pos3[1]][pos3[0]];
+                    
+                    if (cell1 && cell1 === cell2 && cell2 === cell3) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            
+            getAllWinningLines() {
+                const lines = [];
+                
+                // 1. Linie poziome
+                for (let z = 0; z < 3; z++) {
+                    for (let y = 0; y < 3; y++) {
+                        lines.push([[0,y,z], [1,y,z], [2,y,z]]);
+                    }
+                }
+                
+                // 2. Linie pionowe
+                for (let z = 0; z < 3; z++) {
+                    for (let x = 0; x < 3; x++) {
+                        lines.push([[x,0,z], [x,1,z], [x,2,z]]);
+                    }
+                }
+                
+                // 3. Linie głębokie
+                for (let y = 0; y < 3; y++) {
+                    for (let x = 0; x < 3; x++) {
+                        lines.push([[x,y,0], [x,y,1], [x,y,2]]);
+                    }
+                }
+                
+                // 4. Przekątne w warstwach Z
+                for (let z = 0; z < 3; z++) {
+                    lines.push([[0,0,z], [1,1,z], [2,2,z]]);
+                    lines.push([[2,0,z], [1,1,z], [0,2,z]]);
+                }
+                
+                // 5. Przekątne w płaszczyznach X
+                for (let x = 0; x < 3; x++) {
+                    lines.push([[x,0,0], [x,1,1], [x,2,2]]);
+                    lines.push([[x,2,0], [x,1,1], [x,0,2]]);
+                }
+                
+                // 6. Przekątne w płaszczyznach Y
+                for (let y = 0; y < 3; y++) {
+                    lines.push([[0,y,0], [1,y,1], [2,y,2]]);
+                    lines.push([[2,y,0], [1,y,1], [0,y,2]]);
+                }
+                
+                // 7. Przekątne przestrzenne
+                lines.push([[0,0,0], [1,1,1], [2,2,2]]);
+                lines.push([[2,0,0], [1,1,1], [0,2,2]]);
+                lines.push([[0,2,0], [1,1,1], [2,0,2]]);
+                lines.push([[2,2,0], [1,1,1], [0,0,2]]);
+                
+                return lines;
+            }
+        }
+        
+        // SYSTEM TESTÓW
+        class TestManager {
+            constructor() {
+                this.stats = {
+                    normal: { xWins: 0, oWins: 0, draws: 0, total: 0 },
+                    random: { xWins: 0, oWins: 0, draws: 0, total: 0 }
+                };
+                
+                this.isRunning = false;
+                this.setupEventListeners();
+            }
+            
+            setupEventListeners() {
+                document.getElementById('normalTestBtn').addEventListener('click', () => {
+                    this.runTest('normal', 500);
+                });
+                
+                document.getElementById('randomTestBtn').addEventListener('click', () => {
+                    this.runTest('random', 500);
+                });
+                
+                document.getElementById('bothTestsBtn').addEventListener('click', () => {
+                    this.runBothTests();
+                });
+                
+                document.getElementById('clearBtn').addEventListener('click', () => {
+                    this.clearResults();
+                });
+            }
+            
+            async runTest(type, gameCount) {
+                if (this.isRunning) return;
+                
+                this.isRunning = true;
+                this.setButtonsEnabled(false);
+                
+                const stats = { xWins: 0, oWins: 0, draws: 0, total: 0 };
+                const logElement = document.getElementById(type + 'Log');
+                
+                logElement.innerHTML = `🚀 Rozpoczynam ${gameCount} gier (${type})...\n`;
+                
+                const startTime = Date.now();
+                
+                for (let i = 0; i < gameCount; i++) {
+                    const game = new TestGame3D();
+                    const forceRandomFirst = (type === 'random');
+                    
+                    // Symulacja pełnej gry AI vs AI
+                    while (!game.gameOver) {
+                        game.makeAIMove(forceRandomFirst && game.moveCount === 0);
+                    }
+                    
+                    // Zbieranie statystyk
+                    if (game.winner === 'X') {
+                        stats.xWins++;
+                    } else if (game.winner === 'O') {
+                        stats.oWins++;
+                    } else {
+                        stats.draws++;
+                    }
+                    stats.total++;
+                    
+                    // Update progress
+                    const progress = ((i + 1) / gameCount) * 100;
+                    document.getElementById('progressFill').style.width = progress + '%';
+                    document.getElementById('progressText').textContent = 
+                        `${type} test: ${i + 1}/${gameCount} gier (${progress.toFixed(1)}%)`;
+                    
+                    // Update UI co 50 gier
+                    if ((i + 1) % 50 === 0) {
+                        this.updateUI(type, stats);
+                        logElement.innerHTML += `✅ ${i + 1} gier zakończone...\n`;
+                        logElement.scrollTop = logElement.scrollHeight;
+                        await this.sleep(10); // Pozwól UI się odświeżyć
+                    }
+                }
+                
+                const endTime = Date.now();
+                const duration = ((endTime - startTime) / 1000).toFixed(1);
+                
+                this.stats[type] = stats;
+                this.updateUI(type, stats);
+                
+                logElement.innerHTML += `\n🏁 Test ${type} zakończony w ${duration}s!\n`;
+                logElement.innerHTML += `📊 X: ${stats.xWins} | O: ${stats.oWins} | Remis: ${stats.draws}\n`;
+                logElement.scrollTop = logElement.scrollHeight;
+                
+                this.updateAnalysis();
+                
+                document.getElementById('progressText').textContent = `Test ${type} zakończony!`;
+                this.isRunning = false;
+                this.setButtonsEnabled(true);
+            }
+            
+            async runBothTests() {
+                await this.runTest('normal', 500);
+                await this.sleep(1000);
+                await this.runTest('random', 500);
+            }
+            
+            updateUI(type, stats) {
+                const total = stats.total || 1;
+                
+                document.getElementById(type + '-x-wins').textContent = stats.xWins;
+                document.getElementById(type + '-o-wins').textContent = stats.oWins;
+                document.getElementById(type + '-draws').textContent = stats.draws;
+                document.getElementById(type + '-total').textContent = stats.total;
+                
+                document.getElementById(type + '-x-percent').textContent = 
+                    ((stats.xWins / total) * 100).toFixed(1) + '%';
+                document.getElementById(type + '-o-percent').textContent = 
+                    ((stats.oWins / total) * 100).toFixed(1) + '%';
+                document.getElementById(type + '-draws-percent').textContent = 
+                    ((stats.draws / total) * 100).toFixed(1) + '%';
+            }
+            
+            updateAnalysis() {
+                const normal = this.stats.normal;
+                const random = this.stats.random;
+                
+                if (normal.total === 0 && random.total === 0) {
+                    document.getElementById('analysis').innerHTML = 
+                        '<p>Uruchom testy aby zobaczyć analizę porównawczą...</p>';
+                    return;
+                }
+                
+                let analysis = '<h4>📈 Analiza Wyników</h4>';
+                
+                if (normal.total > 0) {
+                    const normalXRate = (normal.xWins / normal.total) * 100;
+                    analysis += `<p><strong>🎯 Normalny start:</strong> AI #1 (X) wygrał ${normalXRate.toFixed(1)}% gier</p>`;
+                }
+                
+                if (random.total > 0) {
+                    const randomXRate = (random.xWins / random.total) * 100;
+                    analysis += `<p><strong>🎲 Losowy start:</strong> AI #1 (X) wygrał ${randomXRate.toFixed(1)}% gier</p>`;
+                }
+                
+                if (normal.total > 0 && random.total > 0) {
+                    const normalXRate = (normal.xWins / normal.total) * 100;
+                    const randomXRate = (random.xWins / random.total) * 100;
+                    const difference = normalXRate - randomXRate;
+                    
+                    analysis += '<hr>';
+                    analysis += `<p><strong>🔍 Różnica przewagi:</strong> ${Math.abs(difference).toFixed(1)} punktów procentowych</p>`;
+                    
+                    if (difference > 5) {
+                        analysis += '<p><strong>🎯 Wniosek:</strong> Normalny start daje znaczną przewagę pierwszemu graczowi!</p>';
+                    } else if (difference > 2) {
+                        analysis += '<p><strong>⚖️ Wniosek:</strong> Normalny start daje lekką przewagę pierwszemu graczowi.</p>';
+                    } else {
+                        analysis += '<p><strong>🎲 Wniosek:</strong> Losowy start skutecznie wyrównuje szanse!</p>';
+                    }
+                    
+                    // Remisy
+                    const normalDrawRate = (normal.draws / normal.total) * 100;
+                    const randomDrawRate = (random.draws / random.total) * 100;
+                    
+                    analysis += `<p><strong>🤝 Remisy:</strong> Normalny ${normalDrawRate.toFixed(1)}% vs Losowy ${randomDrawRate.toFixed(1)}%</p>`;
+                }
+                
+                document.getElementById('analysis').innerHTML = analysis;
+            }
+            
+            clearResults() {
+                this.stats = {
+                    normal: { xWins: 0, oWins: 0, draws: 0, total: 0 },
+                    random: { xWins: 0, oWins: 0, draws: 0, total: 0 }
+                };
+                
+                this.updateUI('normal', this.stats.normal);
+                this.updateUI('random', this.stats.random);
+                
+                document.getElementById('normalLog').innerHTML = '';
+                document.getElementById('randomLog').innerHTML = '';
+                
+                document.getElementById('progressFill').style.width = '0%';
+                document.getElementById('progressText').textContent = 'Gotowy do testów';
+                
+                this.updateAnalysis();
+            }
+            
+            setButtonsEnabled(enabled) {
+                const buttons = ['normalTestBtn', 'randomTestBtn', 'bothTestsBtn', 'clearBtn'];
+                buttons.forEach(id => {
+                    document.getElementById(id).disabled = !enabled;
+                });
+            }
+            
+            sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+        }
+        
+        // Inicjalizacja
+        window.onload = () => {
+            window.testManager = new TestManager();
+            console.log('🧪 Test Manager AI vs AI gotowy!');
+        };
+    </script>
+</body>
+</html>

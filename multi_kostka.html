@@ -343,44 +343,8 @@
                 const game = this.games[gameIndex];
                 if (game.gameOver || game.currentPlayer !== 'O') return;
                 
-                // 1. Spróbuj wygrać (najwyższy priorytet)
-                let move = game.findBestMove('O');
-                if (move) {
-                    game.makeMove(move.x, move.y, move.z);
-                    console.log(`🤖 AI w grze #${gameIndex+1} wygrywa natychmiast!`);
-                    return;
-                }
-                
-                // 2. Zablokuj gracza przed wygraną (krytyczne!)
-                move = game.findBestMove('X');
-                if (move) {
-                    game.makeMove(move.x, move.y, move.z);
-                    console.log(`🤖 AI w grze #${gameIndex+1} blokuje wygraną gracza!`);
-                    return;
-                }
-                
-                // 3. MINIMAX - najlepszy ruch strategiczny (myślenie 2-3 ruchy naprzód)
-                move = game.findBestMoveWithMinimax();
-                if (move) {
-                    game.makeMove(move.x, move.y, move.z);
-                    console.log(`🤖 AI w grze #${gameIndex+1} gra strategicznie (Minimax) na (${move.x},${move.y},${move.z}) - ocena: ${move.score}`);
-                    return;
-                }
-                
-                // 4. STRATEGICZNE CENTRUM - najlepsze pole w 3D
-                if (game.board[1][1][1] === '') {
-                    game.makeMove(1, 1, 1);
-                    console.log(`🤖 AI w grze #${gameIndex+1} zajmuje strategiczne centrum (1,1,1)`);
-                    return;
-                }
-                
-                // 5. Ostateczność - losowy ruch
-                const empty = game.getEmptyFields();
-                if (empty.length > 0) {
-                    const randomField = empty[Math.floor(Math.random() * empty.length)];
-                    game.makeMove(randomField.x, randomField.y, randomField.z);
-                    console.log(`🤖 AI w grze #${gameIndex+1} gra losowo (ostateczność)`);
-                }
+                // DELEGUJ do mocnego AI w samej grze
+                game.makeAIMove();
             }
             
             resetAllGames() {
@@ -570,6 +534,17 @@
             makeAIMove() {
                 if (this.gameOver || this.currentPlayer !== 'O') return;
                 
+                // OPENING BOOK - pierwsze ruchy strategiczne
+                const moveCount = 27 - this.getEmptyFields().length;
+                if (moveCount <= 2) {
+                    const openingMove = this.getOpeningMove();
+                    if (openingMove) {
+                        this.makeMove(openingMove.x, openingMove.y, openingMove.z);
+                        console.log(`🧠 AI gra opening book: (${openingMove.x},${openingMove.y},${openingMove.z})`);
+                        return;
+                    }
+                }
+                
                 // 1. Spróbuj wygrać (najwyższy priorytet)
                 let move = this.findBestMove('O');
                 if (move) {
@@ -586,22 +561,22 @@
                     return;
                 }
                 
-                // 3. MINIMAX - najlepszy ruch strategiczny (myślenie 2-3 ruchy naprzód)
+                // 3. MINIMAX - najlepszy ruch strategiczny (myślenie 4-6 ruchów naprzód)
                 move = this.findBestMoveWithMinimax();
                 if (move) {
                     this.makeMove(move.x, move.y, move.z);
-                    console.log(`🤖 AI w grze #${this.gameIndex+1} gra strategicznie (Minimax) - ocena: ${move.score}`);
+                    console.log(`🤖 AI w grze #${this.gameIndex+1} gra strategicznie (Minimax głęb.${move.depth || '?'}) - ocena: ${move.score}`);
                     return;
                 }
                 
-                // 4. STRATEGICZNE CENTRUM - najlepsze pole w 3D
+                // 4. STRATEGICZNE CENTRUM - najlepsze pole w 3D (jesli dostępne)
                 if (this.board[1][1][1] === '') {
                     this.makeMove(1, 1, 1);
                     console.log(`🤖 AI w grze #${this.gameIndex+1} zajmuje strategiczne centrum (1,1,1)`);
                     return;
                 }
                 
-                // 5. Ostateczność - losowy ruch
+                // 5. Ostateczność - losowy ruch (nie powinno się zdarzyć)
                 const empty = this.getEmptyFields();
                 if (empty.length > 0) {
                     const move = empty[Math.floor(Math.random() * empty.length)];
@@ -610,12 +585,65 @@
                 }
             }
             
+            // OPENING BOOK - strategiczne pierwsze ruchy
+            getOpeningMove() {
+                const empty = this.getEmptyFields();
+                const moveCount = 27 - empty.length;
+                
+                if (moveCount === 0) {
+                    // Pierwszy ruch AI - zawsze centrum
+                    return { x: 1, y: 1, z: 1 };
+                }
+                
+                if (moveCount === 1) {
+                    // Drugi ruch - odpowiedź na ruch gracza
+                    
+                    // Jeśli gracz zajął centrum - zajmij narożnik
+                    if (this.board[1][1][1] === 'X') {
+                        const corners = [
+                            {x: 0, y: 0, z: 0}, {x: 2, y: 2, z: 2},
+                            {x: 0, y: 0, z: 2}, {x: 2, y: 2, z: 0}
+                        ];
+                        return corners[Math.floor(Math.random() * corners.length)];
+                    }
+                    
+                    // Jeśli gracz zajął narożnik - zajmij centrum
+                    const corners = [[0,0,0], [0,0,2], [0,2,0], [0,2,2], [2,0,0], [2,0,2], [2,2,0], [2,2,2]];
+                    for (const corner of corners) {
+                        if (this.board[corner[2]][corner[1]][corner[0]] === 'X' && this.board[1][1][1] === '') {
+                            return { x: 1, y: 1, z: 1 };
+                        }
+                    }
+                    
+                    // Jeśli gracz zajął krawędź/ścianę - centrum lub przeciwległy narożnik
+                    if (this.board[1][1][1] === '') {
+                        return { x: 1, y: 1, z: 1 };
+                    }
+                    
+                    // Fallback - najlepszy dostępny narożnik
+                    const availableCorners = corners.filter(c => 
+                        this.board[c[2]][c[1]][c[0]] === ''
+                    );
+                    if (availableCorners.length > 0) {
+                        const corner = availableCorners[0];
+                        return { x: corner[0], y: corner[1], z: corner[2] };
+                    }
+                }
+                
+                return null; // Po 2 ruchach używaj normalnej logiki
+            }
+            
             findBestMove(player) {
                 const empty = this.getEmptyFields();
                 
                 for (const field of empty) {
+                    // Symuluj ruch dla danego gracza
                     this.board[field.z][field.y][field.x] = player;
-                    const wins = this.checkWinner();
+                    
+                    // Sprawdź czy ten gracz wygrywa tym ruchem
+                    const wins = this.checkWinnerForPlayer(player);
+                    
+                    // Cofnij ruch
                     this.board[field.z][field.y][field.x] = '';
                     
                     if (wins) return field;
@@ -624,7 +652,26 @@
                 return null;
             }
             
-            // MINIMAX ALGORYTM - myślenie 2-3 ruchy naprzód
+            // SPRAWDŹ WYGRANĄ DLA KONKRETNEGO GRACZA
+            checkWinnerForPlayer(player) {
+                const lines = this.getAllWinningLines();
+                
+                for (const line of lines) {
+                    const [pos1, pos2, pos3] = line;
+                    
+                    const cell1 = this.board[pos1[2]][pos1[1]][pos1[0]];
+                    const cell2 = this.board[pos2[2]][pos2[1]][pos2[0]];
+                    const cell3 = this.board[pos3[2]][pos3[1]][pos3[0]];
+                    
+                    if (cell1 === player && cell2 === player && cell3 === player) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            
+            // MINIMAX ALGORYTM - WZMOCNIONY - myślenie 4-6 ruchów naprzód
             findBestMoveWithMinimax() {
                 const emptyFields = this.getEmptyFields();
                 if (emptyFields.length === 0) return null;
@@ -632,10 +679,19 @@
                 let bestMove = null;
                 let bestScore = -Infinity;
                 
-                // Ograniczamy głębokość w zależności od liczby wolnych pól (wydajność)
-                const depth = emptyFields.length > 15 ? 2 : 3;
+                // ADAPTACYJNA GŁĘBOKOŚĆ - mocniejsze AI
+                let depth;
+                if (emptyFields.length > 20) depth = 3;      // Początek gry
+                else if (emptyFields.length > 15) depth = 4; // Środek gry
+                else if (emptyFields.length > 10) depth = 5; // Późny środek
+                else depth = 6;                              // Endgame - pełna analiza
                 
-                for (const field of emptyFields) {
+                console.log(`🧠 AI głębokość: ${depth} (${emptyFields.length} wolnych pól)`);
+                
+                // Priorytetyzacja ruchów dla lepszej wydajności
+                const prioritizedMoves = this.prioritizeMoves(emptyFields);
+                
+                for (const field of prioritizedMoves.slice(0, Math.min(15, prioritizedMoves.length))) {
                     // Symuluj ruch AI
                     this.board[field.z][field.y][field.x] = 'O';
                     
@@ -654,24 +710,124 @@
                 return bestMove;
             }
             
-            // MINIMAX z Alpha-Beta Pruning
+            // PRIORYTETYZACJA RUCHÓW - najlepsze ruchy pierwsze
+            prioritizeMoves(fields) {
+                return fields.map(field => ({
+                    ...field,
+                    priority: this.evaluateMoveImportance(field)
+                })).sort((a, b) => b.priority - a.priority);
+            }
+            
+            // OCENA WAŻNOŚCI RUCHU
+            evaluateMoveImportance(field) {
+                let priority = 0;
+                
+                // 1. BONUS POZYCYJNY
+                const {x, y, z} = field;
+                
+                // Centrum (1,1,1) - najważniejsze pole
+                if (x === 1 && y === 1 && z === 1) priority += 50;
+                
+                // Centrum ścian - bardzo ważne  
+                if ((x === 1 && y === 1 && (z === 0 || z === 2)) ||
+                    (x === 1 && z === 1 && (y === 0 || y === 2)) ||
+                    (y === 1 && z === 1 && (x === 0 || x === 2))) {
+                    priority += 30;
+                }
+                
+                // Narożniki - kontrola przekątnych
+                if ((x === 0 || x === 2) && (y === 0 || y === 2) && (z === 0 || z === 2)) {
+                    priority += 25;
+                }
+                
+                // Centrum krawędzi
+                if (([x,y,z].filter(coord => coord === 1).length === 1) &&
+                    ([x,y,z].filter(coord => coord === 0 || coord === 2).length === 2)) {
+                    priority += 15;
+                }
+                
+                // 2. ANALIZA LINII - ile linii wpływa na to pole
+                const affectedLines = this.getAffectedLines(field);
+                priority += affectedLines * 2;
+                
+                // 3. THREAT ANALYSIS - czy ten ruch blokuje/tworzy zagrożenia
+                this.board[z][y][x] = 'O';
+                const aiThreats = this.countThreats('O');
+                this.board[z][y][x] = '';
+                
+                this.board[z][y][x] = 'X';
+                const blockedPlayerThreats = this.countThreats('X');
+                this.board[z][y][x] = '';
+                
+                priority += aiThreats * 10;
+                priority += blockedPlayerThreats * 12; // Blokowanie ważniejsze
+                
+                return priority;
+            }
+            
+            // ZLICZ ZAGROŻENIA (2 w linii + 1 wolne)
+            countThreats(player) {
+                let threats = 0;
+                const lines = this.getAllWinningLines();
+                
+                for (const line of lines) {
+                    let playerCount = 0;
+                    let emptyCount = 0;
+                    
+                    for (const pos of line) {
+                        const cell = this.board[pos[2]][pos[1]][pos[0]];
+                        if (cell === player) playerCount++;
+                        else if (cell === '') emptyCount++;
+                    }
+                    
+                    // 2 w linii + 1 wolne = zagrożenie
+                    if (playerCount === 2 && emptyCount === 1) {
+                        threats++;
+                    }
+                }
+                
+                return threats;
+            }
+            
+            // POLICZ LINIE WPŁYWAJĄCE NA POLE
+            getAffectedLines(field) {
+                const lines = this.getAllWinningLines();
+                let count = 0;
+                
+                for (const line of lines) {
+                    for (const pos of line) {
+                        if (pos[0] === field.x && pos[1] === field.y && pos[2] === field.z) {
+                            count++;
+                            break;
+                        }
+                    }
+                }
+                
+                return count;
+            }
+            // MINIMAX z Alpha-Beta Pruning - WZMOCNIONY
             minimax(depth, isMaximizing, alpha, beta) {
                 // Sprawdź stan gry
                 const winner = this.checkWinnerForMinimax();
-                if (winner === 'O') return 100 + depth; // AI wygrywa - preferuj szybsze wygrane
-                if (winner === 'X') return -100 - depth; // Gracz wygrywa
+                if (winner === 'O') return 1000 + depth; // AI wygrywa - preferuj szybsze wygrane
+                if (winner === 'X') return -1000 - depth; // Gracz wygrywa
                 
                 const emptyFields = this.getEmptyFields();
                 if (depth === 0 || emptyFields.length === 0) {
-                    // Oceń pozycję
-                    return this.evaluateBoard();
+                    // Oceń pozycję - ULEPSZONA HEURYSTYKA
+                    return this.evaluateBoardAdvanced();
                 }
+                
+                // Priorytetyzuj ruchy na każdym poziomie
+                const prioritizedFields = emptyFields.length > 8 ? 
+                    this.prioritizeMoves(emptyFields).slice(0, 8) : 
+                    emptyFields;
                 
                 if (isMaximizing) {
                     // Tura AI (maksymalizuje)
                     let maxEval = -Infinity;
                     
-                    for (const field of emptyFields) {
+                    for (const field of prioritizedFields) {
                         this.board[field.z][field.y][field.x] = 'O';
                         const evaluation = this.minimax(depth - 1, false, alpha, beta);
                         this.board[field.z][field.y][field.x] = '';
@@ -687,7 +843,7 @@
                     // Tura gracza (minimalizuje)
                     let minEval = Infinity;
                     
-                    for (const field of emptyFields) {
+                    for (const field of prioritizedFields) {
                         this.board[field.z][field.y][field.x] = 'X';
                         const evaluation = this.minimax(depth - 1, true, alpha, beta);
                         this.board[field.z][field.y][field.x] = '';
@@ -720,7 +876,7 @@
                 return null; // Brak zwycięzcy
             }
             
-            // OCENA CAŁEJ PLANSZY
+            // OCENA CAŁEJ PLANSZY - ULEPSZONA WERSJA
             evaluateBoard() {
                 let score = 0;
                 const lines = this.getAllWinningLines();
@@ -754,6 +910,91 @@
                 if (this.board[1][1][1] === 'X') score -= 3;
                 
                 return score;
+            }
+            
+            // ZAAWANSOWANA OCENA PLANSZY - NOWA
+            evaluateBoardAdvanced() {
+                let score = 0;
+                const lines = this.getAllWinningLines();
+                
+                // 1. ANALIZA LINII z wagami
+                for (const line of lines) {
+                    let aiCount = 0;
+                    let playerCount = 0;
+                    let emptyCount = 0;
+                    let lineValue = 1;
+                    
+                    // Sprawdź czy linia zawiera centrum
+                    let hasCenter = line.some(pos => pos[0] === 1 && pos[1] === 1 && pos[2] === 1);
+                    if (hasCenter) lineValue = 2; // Linie przez centrum są ważniejsze
+                    
+                    // Sprawdź czy to przekątna główna
+                    let isDiagonal = line.every(pos => pos[0] === pos[1] && pos[1] === pos[2]);
+                    if (isDiagonal) lineValue = 3; // Przekątne główne najważniejsze
+                    
+                    for (const pos of line) {
+                        const symbol = this.board[pos[2]][pos[1]][pos[0]];
+                        if (symbol === 'O') aiCount++;
+                        else if (symbol === 'X') playerCount++;
+                        else emptyCount++;
+                    }
+                    
+                    // Ocena linii z wagami
+                    if (playerCount === 0) { // AI może wygrać tą linią
+                        if (aiCount === 2) score += 50 * lineValue;  // AI prawie wygrywa!
+                        else if (aiCount === 1) score += 5 * lineValue;  // AI ma pozycję
+                    }
+                    
+                    if (aiCount === 0) { // Gracz może wygrać tą linią  
+                        if (playerCount === 2) score -= 45 * lineValue; // NIEBEZPIECZEŃSTWO!
+                        else if (playerCount === 1) score -= 3 * lineValue; // Gracz ma pozycję
+                    }
+                }
+                
+                // 2. BONUSY POZYCYJNE
+                // Centrum absolutne
+                if (this.board[1][1][1] === 'O') score += 30;
+                else if (this.board[1][1][1] === 'X') score -= 20;
+                
+                // Centra ścian - kontrola 3D
+                const facesCenters = [[1,1,0], [1,1,2], [1,0,1], [1,2,1], [0,1,1], [2,1,1]];
+                for (const center of facesCenters) {
+                    if (this.board[center[2]][center[1]][center[0]] === 'O') score += 15;
+                    else if (this.board[center[2]][center[1]][center[0]] === 'X') score -= 10;
+                }
+                
+                // Narożniki - kontrola przekątnych  
+                const corners = [[0,0,0], [0,0,2], [0,2,0], [0,2,2], [2,0,0], [2,0,2], [2,2,0], [2,2,2]];
+                for (const corner of corners) {
+                    if (this.board[corner[2]][corner[1]][corner[0]] === 'O') score += 8;
+                    else if (this.board[corner[2]][corner[1]][corner[0]] === 'X') score -= 5;
+                }
+                
+                // 3. MOBILITY - ile ruchów ma każdy gracz
+                const aiMobility = this.countValidMoves('O');
+                const playerMobility = this.countValidMoves('X');
+                score += (aiMobility - playerMobility) * 2;
+                
+                return score;
+            }
+            
+            // ZLICZ DOSTĘPNE RUCHY
+            countValidMoves(player) {
+                let moves = 0;
+                const empty = this.getEmptyFields();
+                
+                for (const field of empty) {
+                    this.board[field.z][field.y][field.x] = player;
+                    
+                    // Sprawdź czy ten ruch tworzy zagrożenie
+                    const threats = this.countThreats(player);
+                    if (threats > 0) moves += 2; // Zagrażające ruchy warte więcej
+                    else moves += 1;
+                    
+                    this.board[field.z][field.y][field.x] = '';
+                }
+                
+                return moves;
             }
             
             getEmptyFields() {

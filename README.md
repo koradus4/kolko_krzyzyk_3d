@@ -172,3 +172,120 @@ python main.py --instance=3
 - **Narożniki** - druga najlepsza opcja
 - **Krawędzie** - uzupełniające ruchy
 - **Myśl w 3D** - linie mogą przebiegać przez całą kostkę!
+
+---
+
+## 🌐 Wersja Web - multi_kostka.html
+
+**Aktualnie dostępna wersja webowa z pełną funkcjonalnością desktop:**
+- ✅ **3D rendering** w przeglądarce (HTML5 Canvas)
+- ✅ **3 równoczesne gry** z przełączaniem myszą
+- ✅ **Zaawansowane AI** z algorytmem Minimax + Alpha-Beta Pruning
+- ✅ **Obsługa myszy** - klik w gry tła przenosi na pierwszy plan
+- ✅ **49 linii wygrywających** w przestrzeni 3D
+- ✅ **Strategiczne myślenie AI** - 2-3 ruchy naprzód
+
+---
+
+## 🚀 Plan Rozwoju / Roadmap
+
+### 📱 **KIERUNEK 1: Progressive Web App (PWA) + Mobile**
+*Priorytet: ⭐⭐⭐ (Łatwy start - 1-2 godziny)*
+
+**Co to oznacza:**
+- 📲 **Instalowalna aplikacja** na telefonie (jak natywna app)
+- 🔄 **Działa offline** dzięki Service Worker
+- 👆 **Touch controls** zamiast myszy
+- 📐 **Responsive design** dla różnych ekranów
+- 🏠 **"Add to Home Screen"** - ikona na pulpicie
+
+**Potrzebne zmiany:**
+```html
+<!-- Podstawowe meta tagi dla mobile -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.json">
+
+<!-- Service Worker dla cache -->
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js');
+}
+</script>
+
+<!-- Touch events zamiast mouse -->
+canvas.addEventListener('touchstart', handleTouch);
+canvas.addEventListener('touchmove', handleTouch);
+```
+
+**Deploy na Render.com:**
+- ☁️ **Static Site** (darmowy hosting)
+- 🔗 **Custom domain** opcjonalnie  
+- 🔒 **HTTPS** automatycznie
+- 🌍 **Globalny dostęp** z telefonu
+
+---
+
+### 🌐 **KIERUNEK 2: Multiplayer Online**
+*Priorytet: ⭐⭐ (Średni projekt - 3-5 dni)*
+
+**Wizja systemu:**
+```
+┌─────────────────────────────────────┐
+│  GLOBAL GAME STATE (3 kostki)      │
+│  ┌─────┐  ┌─────┐  ┌─────┐        │
+│  │Game1│  │Game2│  │Game3│         │
+│  │H+AI │  │AI+AI│  │H+H+A│         │
+│  └─────┘  └─────┘  └─────┘        │
+└─────────────────────────────────────┘
+    ↕️ WebSocket sync ↕️
+┌─────────────────────────────────────┐
+│  PLAYER PANEL (klif123)            │
+│  Score: 1240  Rank: #15            │
+│  ┌─────┐  ┌─────┐  ┌─────┐        │
+│  │  ●  │  │     │  │  ●  │        │ (● = aktywny)
+│  └─────┘  └─────┘  └─────┘        │
+└─────────────────────────────────────┘
+```
+
+**Mechanika gry:**
+- 🎮 **3 kostki zawsze aktywne** - AI gra non-stop w tle
+- 👤 **Gracz loguje się** → dostaje swój panel z 3 grami  
+- ⏱️ **30 sekund na ruch** - timer + auto-skip
+- 🌍 **Globalna pula graczy** - każdy human może wejść w dowolną kostkę
+- 🤝 **Hybrydowe mecze:** Human vs AI lub Human vs Human vs AI
+- 🏆 **System punktowy** + ranking globalny
+
+**Architektura techniczna:**
+- **Backend:** Node.js + Express + Socket.IO (Render.com)
+- **Frontend:** Obecny `multi_kostka.html` + WebSocket API
+- **Baza danych:** PostgreSQL (darmowa na Render) dla kont/statystyk
+- **Real-time:** Socket.IO dla synchronizacji gier między graczami
+
+**Funkcje społecznościowe:**
+- 👥 **Lobby z listą aktywnych gier**
+- 💬 **Chat w grach** (opcjonalny)
+- 🏅 **Achievements/osiągnięcia**
+- 📊 **Szczegółowe statystyki**
+
+---
+
+### 🎯 **Rekomendacja implementacji:**
+
+**FAZA 1 (Start):** 📱 PWA + Mobile + Render Deploy
+- ✅ **Szybki efekt** - gra na telefonie w weekend
+- ✅ **Nauka technologii** PWA/Service Workers  
+- ✅ **Test hostingu** na Render.com
+
+**FAZA 2 (Przyszłość):** 🌐 Multiplayer Online
+- ✅ **Zaawansowany projekt** na dłuższy czas
+- ✅ **Uczenie się** WebSocket/backend development
+- ✅ **Skalowalna architektura** dla wielu graczy
+
+---
+
+**Pytania do rozważenia:**
+- 🤔 Zacząć od jakiej fazy?
+- 🎨 Jakieś dodatkowe funkcje graficzne?
+- 🏆 System rankingowy - jak skomplikowany?
+- 💰 Monetyzacja w przyszłości? (reklamy/premium features)
