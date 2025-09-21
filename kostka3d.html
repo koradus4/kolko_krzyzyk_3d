@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Kostka - Wzór do obracania</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #000000;
+            color: white;
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        
+        canvas {
+            border: 2px solid #16213e;
+            background-color: #000000;
+            display: block;
+            margin: 20px auto;
+            cursor: pointer;
+        }
+        
+        #controls {
+            margin: 20px 0;
+            font-size: 18px;
+        }
+        
+        .key-hint {
+            display: inline-block;
+            margin: 5px;
+            padding: 8px 12px;
+            background-color: #16213e;
+            border-radius: 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎯 3D Kostka Kółko i Krzyżyk - Wzór</h1>
+    <p>Użyj strzałek do obracania kostki</p>
+    
+    <canvas id="gameCanvas" width="600" height="600"></canvas>
+    
+    <div id="controls">
+        <div class="key-hint">↑ ↓ ← →</div> Obracanie
+        <div class="key-hint">Q E</div> Obrót Z
+        <div class="key-hint">R</div> Reset widoku
+        <div class="key-hint">SPACJA</div> Nowa gra
+        <div class="key-hint">KLIK</div> Zagraj
+    </div>
+
+    <script>
+        class Cube3D {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.width = canvas.width;
+                this.height = canvas.height;
+                
+                // Kąty rotacji
+                this.rotationX = 0.3;
+                this.rotationY = 0.7;  
+                this.rotationZ = 0;
+                
+                // Pozycja kostki w 3D
+                this.centerX = 0;
+                this.centerY = 0;
+                this.centerZ = 0;
+                
+                // Rozmiar kostki
+                this.cubeSize = 150;
+                
+                // Pozycja kamery
+                this.cameraDistance = 400;
+                
+                // LOGIKA GRY z main.py
+                this.board = Array(3).fill().map(() => 
+                    Array(3).fill().map(() => Array(3).fill(''))
+                );
+                this.currentPlayer = 'X';
+                this.gameOver = false;
+                this.winner = null;
+                
+                // Globalne punkty
+                this.globalScore = { player: 0, ai: 0 };
+                
+                this.setupControls();
+                this.animate();
+            }
+            
+            setupControls() {
+                // Kontrolki klawiaturowe
+                document.addEventListener('keydown', (e) => {
+                    const rotationSpeed = 0.1;
+                    
+                    switch(e.key) {
+                        case 'ArrowUp':
+                            this.rotationX -= rotationSpeed;
+                            break;
+                        case 'ArrowDown':
+                            this.rotationX += rotationSpeed;
+                            break;
+                        case 'ArrowLeft':
+                            this.rotationY -= rotationSpeed;
+                            break;
+                        case 'ArrowRight':
+                            this.rotationY += rotationSpeed;
+                            break;
+                        case 'q':
+                        case 'Q':
+                            this.rotationZ -= rotationSpeed;
+                            break;
+                        case 'e':
+                        case 'E':
+                            this.rotationZ += rotationSpeed;
+                            break;
+                        case 'r':
+                        case 'R':
+                            this.rotationX = 0.3;
+                            this.rotationY = 0.7;
+                            this.rotationZ = 0;
+                            break;
+                        case ' ':
+                            this.newGame();
+                            e.preventDefault();
+                            break;
+                    }
+                    
+                    e.preventDefault();
+                });
+                
+                // KLIKANIE W KOSTĘ - LOGIKA GRY
+                this.canvas.addEventListener('click', (event) => {
+                    console.log(`🎮 Klik! GameOver: ${this.gameOver}, CurrentPlayer: ${this.currentPlayer}`);
+                    
+                    if (this.gameOver) {
+                        console.log('❌ Gra zakończona - ignoruję klik');
+                        return;
+                    }
+                    
+                    if (this.currentPlayer !== 'X') {
+                        console.log('❌ Nie twoja kolej - ignoruję klik');
+                        return;
+                    }
+                    
+                    const rect = this.canvas.getBoundingClientRect();
+                    const mouseX = event.clientX - rect.left;
+                    const mouseY = event.clientY - rect.top;
+                    
+                    console.log(`🖱️ Pozycja myszy: (${mouseX}, ${mouseY})`);
+                    
+                    // Znajdź pole które kliknął użytkownik
+                    const field = this.getFieldFromClick(mouseX, mouseY);
+                    if (field) {
+                        if (this.board[field.z][field.y][field.x] === '') {
+                            console.log(`✅ Gracz zagra w pole: (${field.x}, ${field.y}, ${field.z})`);
+                            
+                            // Gracz robi ruch
+                            this.makeMove(field.x, field.y, field.z);
+                            
+                            // AI robi ruch po chwili
+                            if (!this.gameOver && this.currentPlayer === 'O') {
+                                setTimeout(() => this.makeAIMove(), 800);
+                            }
+                        } else {
+                            console.log(`❌ Pole (${field.x}, ${field.y}, ${field.z}) jest już zajęte: ${this.board[field.z][field.y][field.x]}`);
+                        }
+                    } else {
+                        console.log('❌ Nie znaleziono pola do zagran');
+                    }
+                });
+                
+                // Focus canvas dla klawiszy
+                this.canvas.addEventListener('click', () => {
+                    this.canvas.focus();
+                });
+                this.canvas.tabIndex = 0;
+            }
+            
+            // KLIKANIE W POLA 3D - ulepszona wersja
+            getFieldFromClick(mouseX, mouseY) {
+                const size = this.cubeSize;
+                const cellSize = size / 3;
+                
+                // Sprawdź wszystkie 27 pól kostki
+                let bestField = null;
+                let bestDistance = Infinity;
+                
+                console.log(`🖱️ Klik w: (${mouseX}, ${mouseY})`);
+                
+                for (let x = 0; x < 3; x++) {
+                    for (let y = 0; y < 3; y++) {
+                        for (let z = 0; z < 3; z++) {
+                            // Pomiń zajęte pola
+                            if (this.board[z][y][x] !== '') continue;
+                            
+                            // Centrum pola w 3D
+                            const fieldX = -size/2 + (x + 0.5) * cellSize;
+                            const fieldY = -size/2 + (y + 0.5) * cellSize;
+                            const fieldZ = -size/2 + (z + 0.5) * cellSize;
+                            
+                            // Rzutuj na ekran
+                            const projected = this.project3DTo2D(fieldX, fieldY, fieldZ);
+                            
+                            // Sprawdź odległość od klika
+                            const distance = Math.sqrt(
+                                (mouseX - projected.x) ** 2 + 
+                                (mouseY - projected.y) ** 2
+                            );
+                            
+                            // Większy obszar klika (50 pikseli) i tylko widoczne pola (z > -200)
+                            if (projected.z > -200 && distance < 50) {
+                                console.log(`   Pole (${x},${y},${z}): projekcja (${projected.x.toFixed(1)}, ${projected.y.toFixed(1)}, ${projected.z.toFixed(1)}) - odległość: ${distance.toFixed(1)}`);
+                                
+                                if (distance < bestDistance) {
+                                    bestDistance = distance;
+                                    bestField = { x, y, z };
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (bestField) {
+                    console.log(`✅ Wybrane pole: (${bestField.x}, ${bestField.y}, ${bestField.z}) - odległość: ${bestDistance.toFixed(1)}`);
+                } else {
+                    console.log('❌ Nie znaleziono pola w zasięgu klika');
+                }
+                
+                return bestField;
+            }
+            
+            // LOGIKA GRY z main.py
+            makeMove(x, y, z) {
+                if (this.gameOver || this.board[z][y][x] !== '') {
+                    return false;
+                }
+                
+                this.board[z][y][x] = this.currentPlayer;
+                console.log(`${this.currentPlayer} zagrał: (${x},${y},${z})`);
+                
+                if (this.checkWinner()) {
+                    this.gameOver = true;
+                    this.winner = this.currentPlayer;
+                    
+                    if (this.currentPlayer === 'X') {
+                        this.globalScore.player++;
+                        console.log('🏆 Gracz wygrywa!');
+                    } else {
+                        this.globalScore.ai++;
+                        console.log('🤖 AI wygrywa!');
+                    }
+                    
+                    // Auto-restart po 3 sekundach
+                    setTimeout(() => this.newGame(), 3000);
+                    
+                } else if (this.isBoardFull()) {
+                    this.gameOver = true;
+                    this.winner = null;
+                    console.log('🤝 Remis!');
+                    setTimeout(() => this.newGame(), 3000);
+                    
+                } else {
+                    // Zmień gracza
+                    this.currentPlayer = this.currentPlayer === 'X' ? 'O' : 'X';
+                }
+                
+                return true;
+            }
+            
+            // ZAAWANSOWANE AI z main.py - POZIOM MISTRZOWSKI + MINIMAX
+            makeAIMove() {
+                if (this.gameOver || this.currentPlayer !== 'O') {
+                    return;
+                }
+                
+                // 1. Spróbuj wygrać (najwyższy priorytet)
+                let move = this.findBestMove('O');
+                if (move) {
+                    this.makeMove(move.x, move.y, move.z);
+                    console.log('🤖 AI wygrywa natychmiast!');
+                    return;
+                }
+                
+                // 2. Zablokuj gracza przed wygraną (krytyczne!)
+                move = this.findBestMove('X');
+                if (move) {
+                    this.makeMove(move.x, move.y, move.z);
+                    console.log('🤖 AI blokuje wygraną gracza!');
+                    return;
+                }
+                
+                // 3. MINIMAX - najlepszy ruch strategiczny (myślenie 2-3 ruchy naprzód)
+                move = this.findBestMoveWithMinimax();
+                if (move) {
+                    this.makeMove(move.x, move.y, move.z);
+                    console.log(`🤖 AI gra strategicznie (Minimax) na (${move.x},${move.y},${move.z}) - ocena: ${move.score}`);
+                    return;
+                }
+                
+                // 4. STRATEGICZNE CENTRUM - najlepsze pole w 3D
+                if (this.board[1][1][1] === '') {
+                    this.makeMove(1, 1, 1);
+                    console.log('🤖 AI zajmuje strategiczne centrum (1,1,1)');
+                    return;
+                }
+                
+                // 5. Ostateczność - losowy ruch
+                const emptyFields = this.getEmptyFields();
+                if (emptyFields.length > 0) {
+                    const randomField = emptyFields[Math.floor(Math.random() * emptyFields.length)];
+                    this.makeMove(randomField.x, randomField.y, randomField.z);
+                    console.log('🤖 AI gra losowo (ostateczność)');
+                }
+            }
+            
+            // MINIMAX ALGORYTM - myślenie 2-3 ruchy naprzód
+            findBestMoveWithMinimax() {
+                const emptyFields = this.getEmptyFields();
+                if (emptyFields.length === 0) return null;
+                
+                let bestMove = null;
+                let bestScore = -Infinity;
+                
+                // Ograniczamy głębokość w zależności od liczby wolnych pól (wydajność)
+                const depth = emptyFields.length > 15 ? 2 : 3;
+                
+                for (const field of emptyFields) {
+                    // Symuluj ruch AI
+                    this.board[field.z][field.y][field.x] = 'O';
+                    
+                    // Oblicz wynik minimax
+                    const score = this.minimax(depth - 1, false, -Infinity, Infinity);
+                    
+                    // Cofnij ruch
+                    this.board[field.z][field.y][field.x] = '';
+                    
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = { ...field, score };
+                    }
+                }
+                
+                return bestMove;
+            }
+            
+            // MINIMAX z Alpha-Beta Pruning
+            minimax(depth, isMaximizing, alpha, beta) {
+                // Sprawdź stan gry
+                const winner = this.checkWinnerForMinimax();
+                if (winner === 'O') return 100 + depth; // AI wygrywa - preferuj szybsze wygrane
+                if (winner === 'X') return -100 - depth; // Gracz wygrywa
+                
+                const emptyFields = this.getEmptyFields();
+                if (depth === 0 || emptyFields.length === 0) {
+                    // Oceń pozycję
+                    return this.evaluateBoard();
+                }
+                
+                if (isMaximizing) {
+                    // Tura AI (maksymalizuje)
+                    let maxEval = -Infinity;
+                    
+                    for (const field of emptyFields) {
+                        this.board[field.z][field.y][field.x] = 'O';
+                        const evaluation = this.minimax(depth - 1, false, alpha, beta);
+                        this.board[field.z][field.y][field.x] = '';
+                        
+                        maxEval = Math.max(maxEval, evaluation);
+                        alpha = Math.max(alpha, evaluation);
+                        
+                        if (beta <= alpha) break; // Alpha-beta pruning
+                    }
+                    return maxEval;
+                    
+                } else {
+                    // Tura gracza (minimalizuje)
+                    let minEval = Infinity;
+                    
+                    for (const field of emptyFields) {
+                        this.board[field.z][field.y][field.x] = 'X';
+                        const evaluation = this.minimax(depth - 1, true, alpha, beta);
+                        this.board[field.z][field.y][field.x] = '';
+                        
+                        minEval = Math.min(minEval, evaluation);
+                        beta = Math.min(beta, evaluation);
+                        
+                        if (beta <= alpha) break; // Alpha-beta pruning
+                    }
+                    return minEval;
+                }
+            }
+            
+            // SPRAWDZANIE WYGRANEJ dla minimax (szybsza wersja)
+            checkWinnerForMinimax() {
+                const lines = this.getAllWinningLines();
+                
+                for (const line of lines) {
+                    const [pos1, pos2, pos3] = line;
+                    
+                    const cell1 = this.board[pos1[2]][pos1[1]][pos1[0]];
+                    const cell2 = this.board[pos2[2]][pos2[1]][pos2[0]];
+                    const cell3 = this.board[pos3[2]][pos3[1]][pos3[0]];
+                    
+                    if (cell1 && cell1 === cell2 && cell2 === cell3) {
+                        return cell1; // Zwróć zwycięzcę ('X' lub 'O')
+                    }
+                }
+                
+                return null; // Brak zwycięzcy
+            }
+            
+            // OCENA CAŁEJ PLANSZY
+            evaluateBoard() {
+                let score = 0;
+                const lines = this.getAllWinningLines();
+                
+                for (const line of lines) {
+                    let aiCount = 0;
+                    let playerCount = 0;
+                    let emptyCount = 0;
+                    
+                    for (const pos of line) {
+                        const symbol = this.board[pos[2]][pos[1]][pos[0]];
+                        if (symbol === 'O') aiCount++;
+                        else if (symbol === 'X') playerCount++;
+                        else emptyCount++;
+                    }
+                    
+                    // Oceń linię
+                    if (playerCount === 0) { // Linia nie blokowana przez gracza
+                        if (aiCount === 2) score += 20;      // AI prawie wygrywa
+                        else if (aiCount === 1) score += 2;  // AI ma pozycję
+                    }
+                    
+                    if (aiCount === 0) { // Linia nie blokowana przez AI
+                        if (playerCount === 2) score -= 15;  // Gracz prawie wygrywa (zła sytuacja)
+                        else if (playerCount === 1) score -= 1; // Gracz ma pozycję
+                    }
+                }
+                
+                // Bonus za centrum
+                if (this.board[1][1][1] === 'O') score += 5;
+                if (this.board[1][1][1] === 'X') score -= 3;
+                
+                return score;
+            }
+            
+            // STRATEGICZNA OCENA POZYCJI
+            findBestStrategicMove() {
+                const emptyFields = this.getEmptyFields();
+                if (emptyFields.length === 0) return null;
+                
+                let bestMove = null;
+                let bestScore = -1000;
+                
+                for (const field of emptyFields) {
+                    // Oblicz strategiczną wartość tego pola
+                    const score = this.evaluatePosition(field.x, field.y, field.z, 'O');
+                    
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = field;
+                    }
+                }
+                
+                return bestMove;
+            }
+            
+            // OCENA STRATEGICZNEJ WARTOŚCI POZYCJI
+            evaluatePosition(x, y, z, player) {
+                let score = 0;
+                
+                // Sprawdź wszystkie 49 linii przechodzących przez to pole
+                const winningLines = this.getAllWinningLines();
+                
+                for (const line of winningLines) {
+                    // Czy ta linia zawiera nasze pole?
+                    const containsField = line.some(pos => pos[0] === x && pos[1] === y && pos[2] === z);
+                    if (!containsField) continue;
+                    
+                    // Oceń tę linię
+                    let myCount = 0;      // ile mam znaków w linii
+                    let opponentCount = 0; // ile ma przeciwnik
+                    let emptyCount = 0;   // ile pustych
+                    
+                    for (const pos of line) {
+                        const symbol = this.board[pos[2]][pos[1]][pos[0]]; // [x,y,z] -> board[z][y][x]
+                        if (symbol === player) myCount++;
+                        else if (symbol !== '' && symbol !== player) opponentCount++;
+                        else emptyCount++;
+                    }
+                    
+                    // Strategiczna ocena linii
+                    if (opponentCount === 0) { // Linia nie jest blokowana przez przeciwnika
+                        if (myCount === 2) score += 50;      // Prawie wygrana!
+                        else if (myCount === 1) score += 10; // Dobra pozycja
+                        else if (myCount === 0) score += 1;  // Potencjał
+                    }
+                    
+                    if (myCount === 0 && opponentCount === 2) {
+                        score += 30; // Blokowanie prawie wygranej przeciwnika
+                    }
+                }
+                
+                // Bonus za strategiczne pozycje
+                if (x === 1 && y === 1 && z === 1) score += 25; // Centrum bonus
+                
+                // Bonus za narożniki
+                if ((x === 0 || x === 2) && (y === 0 || y === 2) && (z === 0 || z === 2)) {
+                    score += 15;
+                }
+                
+                return score;
+            }
+            
+            // WSZYSTKIE 49 LINII WYGRYWAJĄCYCH - dokładnie z checkWinner()
+            getAllWinningLines() {
+                const lines = [];
+                
+                // 1. Linie poziome (w każdej warstwie Z, w każdym rzędzie Y)
+                for (let z = 0; z < 3; z++) {
+                    for (let y = 0; y < 3; y++) {
+                        lines.push([[0,y,z], [1,y,z], [2,y,z]]);
+                    }
+                }
+                
+                // 2. Linie pionowe (w każdej warstwie Z, w każdej kolumnie X)
+                for (let z = 0; z < 3; z++) {
+                    for (let x = 0; x < 3; x++) {
+                        lines.push([[x,0,z], [x,1,z], [x,2,z]]);
+                    }
+                }
+                
+                // 3. Linie poprzeczne (między warstwami, stałe X,Y)
+                for (let y = 0; y < 3; y++) {
+                    for (let x = 0; x < 3; x++) {
+                        lines.push([[x,y,0], [x,y,1], [x,y,2]]);
+                    }
+                }
+                
+                // 4. Przekątne w warstwach Z (2 przekątne w każdej warstwie)
+                for (let z = 0; z < 3; z++) {
+                    lines.push([[0,0,z], [1,1,z], [2,2,z]]); // główna
+                    lines.push([[2,0,z], [1,1,z], [0,2,z]]); // anty
+                }
+                
+                // 5. Przekątne w płaszczyznach X (2 przekątne w każdej płaszczyźnie X)
+                for (let x = 0; x < 3; x++) {
+                    lines.push([[x,0,0], [x,1,1], [x,2,2]]);
+                    lines.push([[x,2,0], [x,1,1], [x,0,2]]);
+                }
+                
+                // 6. Przekątne w płaszczyznach Y (2 przekątne w każdej płaszczyźnie Y)
+                for (let y = 0; y < 3; y++) {
+                    lines.push([[0,y,0], [1,y,1], [2,y,2]]);
+                    lines.push([[2,y,0], [1,y,1], [0,y,2]]);
+                }
+                
+                // 7. Przekątne przestrzenne (4 główne przekątne kostki 3D)
+                lines.push([[0,0,0], [1,1,1], [2,2,2]]);  // główna 3D
+                lines.push([[2,0,0], [1,1,1], [0,2,2]]);  // anty X
+                lines.push([[0,2,0], [1,1,1], [2,0,2]]);  // anty Y
+                lines.push([[2,2,0], [1,1,1], [0,0,2]]);  // anty XY
+                
+                return lines;
+            }
+            
+            findBestMove(player) {
+                const emptyFields = this.getEmptyFields();
+                
+                for (const field of emptyFields) {
+                    // Symuluj ruch
+                    this.board[field.z][field.y][field.x] = player;
+                    
+                    const wins = this.checkWinner();
+                    
+                    // Cofnij ruch
+                    this.board[field.z][field.y][field.x] = '';
+                    
+                    if (wins) {
+                        return field;
+                    }
+                }
+                
+                return null;
+            }
+            
+            getEmptyFields() {
+                const empty = [];
+                for (let x = 0; x < 3; x++) {
+                    for (let y = 0; y < 3; y++) {
+                        for (let z = 0; z < 3; z++) {
+                            if (this.board[z][y][x] === '') {
+                                empty.push({ x, y, z });
+                            }
+                        }
+                    }
+                }
+                return empty;
+            }
+            
+            isBoardFull() {
+                return this.getEmptyFields().length === 0;
+            }
+            
+            // SPRAWDZANIE WYGRANEJ - dokładnie z main.py (sprawdz_zwyciezce)
+            checkWinner() {
+                const player = this.currentPlayer;
+                
+                // Wszystkie możliwe linie wygrywające w kostce 3x3x3
+                const winningLines = [];
+                
+                // 1. Linie poziome (w każdej warstwie Z, w każdym rzędzie Y)
+                for (let z = 0; z < 3; z++) {
+                    for (let y = 0; y < 3; y++) {
+                        winningLines.push([[0,y,z], [1,y,z], [2,y,z]]);
+                    }
+                }
+                
+                // 2. Linie pionowe (w każdej warstwie Z, w każdej kolumnie X)
+                for (let z = 0; z < 3; z++) {
+                    for (let x = 0; x < 3; x++) {
+                        winningLines.push([[x,0,z], [x,1,z], [x,2,z]]);
+                    }
+                }
+                
+                // 3. Linie poprzeczne (między warstwami, stałe X,Y)
+                for (let y = 0; y < 3; y++) {
+                    for (let x = 0; x < 3; x++) {
+                        winningLines.push([[x,y,0], [x,y,1], [x,y,2]]);
+                    }
+                }
+                
+                // 4. Przekątne w warstwach Z (2 przekątne w każdej warstwie)
+                for (let z = 0; z < 3; z++) {
+                    winningLines.push([[0,0,z], [1,1,z], [2,2,z]]); // główna
+                    winningLines.push([[2,0,z], [1,1,z], [0,2,z]]); // anty
+                }
+                
+                // 5. Przekątne w płaszczyznach X (2 przekątne w każdej płaszczyźnie X)
+                for (let x = 0; x < 3; x++) {
+                    winningLines.push([[x,0,0], [x,1,1], [x,2,2]]);
+                    winningLines.push([[x,2,0], [x,1,1], [x,0,2]]);
+                }
+                
+                // 6. Przekątne w płaszczyznach Y (2 przekątne w każdej płaszczyźnie Y)
+                for (let y = 0; y < 3; y++) {
+                    winningLines.push([[0,y,0], [1,y,1], [2,y,2]]);
+                    winningLines.push([[2,y,0], [1,y,1], [0,y,2]]);
+                }
+                
+                // 7. Przekątne przestrzenne (4 główne przekątne kostki 3D)
+                winningLines.push([[0,0,0], [1,1,1], [2,2,2]]);  // główna 3D
+                winningLines.push([[2,0,0], [1,1,1], [0,2,2]]);  // anty X
+                winningLines.push([[0,2,0], [1,1,1], [2,0,2]]);  // anty Y
+                winningLines.push([[2,2,0], [1,1,1], [0,0,2]]);  // anty XY
+                
+                // Sprawdź wszystkie linie
+                for (const line of winningLines) {
+                    const [pos1, pos2, pos3] = line;
+                    
+                    const cell1 = this.board[pos1[2]][pos1[1]][pos1[0]]; // [x,y,z] -> board[z][y][x]
+                    const cell2 = this.board[pos2[2]][pos2[1]][pos2[0]];
+                    const cell3 = this.board[pos3[2]][pos3[1]][pos3[0]];
+                    
+                    if (cell1 && cell1 === cell2 && cell2 === cell3 && cell1 === player) {
+                        console.log(`🏆 Wygrana linia: (${pos1}) (${pos2}) (${pos3})`);
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            
+            // Mnożenie macierzy rotacji
+            rotatePoint(x, y, z) {
+                // Rotacja wokół osi X
+                let cosX = Math.cos(this.rotationX);
+                let sinX = Math.sin(this.rotationX);
+                let y1 = y * cosX - z * sinX;
+                let z1 = y * sinX + z * cosX;
+                
+                // Rotacja wokół osi Y
+                let cosY = Math.cos(this.rotationY);
+                let sinY = Math.sin(this.rotationY);
+                let x2 = x * cosY + z1 * sinY;
+                let z2 = -x * sinY + z1 * cosY;
+                
+                // Rotacja wokół osi Z
+                let cosZ = Math.cos(this.rotationZ);
+                let sinZ = Math.sin(this.rotationZ);
+                let x3 = x2 * cosZ - y1 * sinZ;
+                let y3 = x2 * sinZ + y1 * cosZ;
+                
+                return { x: x3, y: y3, z: z2 };
+            }
+            
+            // Projekcja 3D -> 2D
+            project3DTo2D(x, y, z) {
+                const rotated = this.rotatePoint(x, y, z);
+                
+                // Perspektywiczna projekcja
+                const perspective = this.cameraDistance / (this.cameraDistance + rotated.z);
+                
+                const screenX = this.width / 2 + rotated.x * perspective;
+                const screenY = this.height / 2 + rotated.y * perspective;
+                
+                return { 
+                    x: screenX, 
+                    y: screenY, 
+                    z: rotated.z,
+                    perspective: perspective 
+                };
+            }
+            
+            drawLine3D(x1, y1, z1, x2, y2, z2, color = 'white', lineWidth = 2, dashed = true) {
+                const p1 = this.project3DTo2D(x1, y1, z1);
+                const p2 = this.project3DTo2D(x2, y2, z2);
+                
+                this.ctx.strokeStyle = color;
+                this.ctx.lineWidth = lineWidth;
+                
+                // Linie przerywane
+                if (dashed) {
+                    this.ctx.setLineDash([5, 3]);
+                } else {
+                    this.ctx.setLineDash([]);
+                }
+                
+                this.ctx.beginPath();
+                this.ctx.moveTo(p1.x, p1.y);
+                this.ctx.lineTo(p2.x, p2.y);
+                this.ctx.stroke();
+                
+                // Reset dash
+                this.ctx.setLineDash([]);
+            }
+            
+            drawFace(corners, color, alpha = 0.3) {
+                if (corners.length < 3) return;
+                
+                // Sortuj według głębokości Z (painter's algorithm)
+                const avgZ = corners.reduce((sum, corner) => sum + corner.z, 0) / corners.length;
+                
+                this.ctx.fillStyle = color;
+                this.ctx.globalAlpha = alpha;
+                this.ctx.beginPath();
+                this.ctx.moveTo(corners[0].x, corners[0].y);
+                
+                for (let i = 1; i < corners.length; i++) {
+                    this.ctx.lineTo(corners[i].x, corners[i].y);
+                }
+                
+                this.ctx.closePath();
+                this.ctx.fill();
+                this.ctx.globalAlpha = 1.0;
+                
+                return avgZ;
+            }
+            
+            render() {
+                // Clear canvas - CZARNE TŁO
+                this.ctx.fillStyle = '#000000';
+                this.ctx.fillRect(0, 0, this.width, this.height);
+                
+                const size = this.cubeSize;
+                const cellSize = size / 3;
+                const lineColor = '#FFFFFF';
+                
+                // DOKŁADNIE JAK W DESKTOP - LINIE SZKIELETU
+                
+                const odstep = size / 3;  // cellSize w desktop
+                
+                // 1. LINIE POZIOME (9 linii) - jak w desktop
+                for (let z = 0; z < 3; z++) {
+                    for (let y = 0; y < 3; y++) {
+                        const z3d = -odstep + z * odstep;  // (z-1) * odstep
+                        const y3d = -odstep + y * odstep;  // (y-1) * odstep
+                        
+                        this.drawLine3D(
+                            -odstep, y3d, z3d,    // start: (-1)*odstep
+                            odstep, y3d, z3d,     // end: (1)*odstep  
+                            lineColor, 2, false   // grubsze linie jak w desktop
+                        );
+                    }
+                }
+                
+                // 2. LINIE PIONOWE (9 linii) - jak w desktop
+                for (let z = 0; z < 3; z++) {
+                    for (let x = 0; x < 3; x++) {
+                        const z3d = -odstep + z * odstep;  // (z-1) * odstep
+                        const x3d = -odstep + x * odstep;  // (x-1) * odstep
+                        
+                        this.drawLine3D(
+                            x3d, -odstep, z3d,    // start: y=(-1)*odstep
+                            x3d, odstep, z3d,     // end: y=(1)*odstep
+                            lineColor, 2, false
+                        );
+                    }
+                }
+                
+                // 3. LINIE GŁĘBOKIE (9 linii) - jak w desktop
+                for (let y = 0; y < 3; y++) {
+                    for (let x = 0; x < 3; x++) {
+                        const y3d = -odstep + y * odstep;  // (y-1) * odstep
+                        const x3d = -odstep + x * odstep;  // (x-1) * odstep
+                        
+                        this.drawLine3D(
+                            x3d, y3d, -odstep,    // start: z=(-1)*odstep
+                            x3d, y3d, odstep,     // end: z=(1)*odstep
+                            lineColor, 2, false
+                        );
+                    }
+                }
+                
+                // 2. MAŁE KWADRACIKI W 27 WĘZŁACH - jak w desktop
+                for (let x = 0; x < 3; x++) {
+                    for (let y = 0; y < 3; y++) {
+                        for (let z = 0; z < 3; z++) {
+                            // Pozycja węzła jak w desktop: (x-1)*odstep, (y-1)*odstep, (z-1)*odstep
+                            const x3d = -odstep + x * odstep;  // (x-1) * odstep
+                            const y3d = -odstep + y * odstep;  // (y-1) * odstep  
+                            const z3d = -odstep + z * odstep;  // (z-1) * odstep
+                            
+                            const projected = this.project3DTo2D(x3d, y3d, z3d);
+                            
+                            // Rysuj tylko widoczne punkty
+                            if (projected.z > -200) {
+                                const squareSize = 20 * projected.perspective;  // Większe jak w desktop
+                                
+                                // Tło kwadratu (pole do gry) - ciemniejsze jak w desktop  
+                                this.ctx.fillStyle = 'rgba(80,80,100,0.8)';
+                                this.ctx.fillRect(
+                                    projected.x - squareSize/2,
+                                    projected.y - squareSize/2,
+                                    squareSize,
+                                    squareSize
+                                );
+                                
+                                // Ramka kwadratu - jaśniejsza jak w desktop
+                                this.ctx.strokeStyle = 'rgba(220,220,220,0.8)';
+                                this.ctx.lineWidth = 2;
+                                this.ctx.setLineDash([]);
+                                this.ctx.strokeRect(
+                                    projected.x - squareSize/2,
+                                    projected.y - squareSize/2,
+                                    squareSize,
+                                    squareSize
+                                );
+                                
+                                // Mała kropka w środku jak w desktop
+                                this.ctx.fillStyle = 'rgba(150,150,170,0.6)';
+                                this.ctx.beginPath();
+                                this.ctx.arc(projected.x, projected.y, Math.max(2, squareSize * 0.1), 0, 2 * Math.PI);
+                                this.ctx.fill();
+                                
+                                // Znak X lub O w środku kwadratu
+                                const symbol = this.board[z][y][x];
+                                if (symbol) {
+                                    this.ctx.fillStyle = symbol === 'X' ? '#FF9650' : '#32A0FF';  // Kolory z desktop
+                                    this.ctx.font = `bold ${Math.floor(20 * projected.perspective)}px Arial`;
+                                    this.ctx.textAlign = 'center';
+                                    this.ctx.fillText(symbol, projected.x, projected.y + 6 * projected.perspective);
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Info o grze
+                this.ctx.fillStyle = 'white';
+                this.ctx.font = '14px monospace';
+                this.ctx.textAlign = 'left';
+                this.ctx.fillText(
+                    `Rotacja X: ${this.rotationX.toFixed(2)} Y: ${this.rotationY.toFixed(2)} Z: ${this.rotationZ.toFixed(2)}`, 
+                    10, 30
+                );
+                this.ctx.fillText(
+                    `Punkty: Gracz ${this.globalScore.player} - ${this.globalScore.ai} AI`, 
+                    10, 50
+                );
+                
+                // Status gry
+                if (this.gameOver) {
+                    this.ctx.fillStyle = this.winner === 'X' ? '#4ECDC4' : 
+                                       this.winner === 'O' ? '#E94560' : '#ffc107';
+                    this.ctx.font = 'bold 20px Arial';
+                    this.ctx.textAlign = 'center';
+                    
+                    const statusText = this.winner === 'X' ? '🏆 WYGRAŁEŚ!' : 
+                                      this.winner === 'O' ? '🤖 AI WYGRAŁO!' : '🤝 REMIS!';
+                    this.ctx.fillText(statusText, this.width/2, this.height - 60);
+                    
+                    this.ctx.fillStyle = 'white';
+                    this.ctx.font = '14px Arial';
+                    this.ctx.fillText('Nowa gra za 3 sekundy...', this.width/2, this.height - 30);
+                    
+                } else {
+                    this.ctx.fillStyle = this.currentPlayer === 'X' ? '#4ECDC4' : '#E94560';
+                    this.ctx.font = '16px Arial';
+                    this.ctx.textAlign = 'center';
+                    
+                    const playerText = this.currentPlayer === 'X' ? '👤 Twoja kolej - kliknij kwadrat!' : '🤖 AI myśli...';
+                    this.ctx.fillText(playerText, this.width/2, this.height - 40);
+                }
+            }
+            
+            drawSymbol(symbol, x, y, z) {
+                const projected = this.project3DTo2D(x, y, z);
+                
+                this.ctx.font = `${Math.floor(30 * projected.perspective)}px Arial`;
+                this.ctx.fillStyle = symbol === 'X' ? '#4ECDC4' : '#E94560';
+                this.ctx.textAlign = 'center';
+                this.ctx.fillText(symbol, projected.x, projected.y + 8);
+            }
+            
+            animate() {
+                this.render();
+                requestAnimationFrame(() => this.animate());
+            }
+        }
+        
+        // Inicjalizacja
+        window.onload = () => {
+            const canvas = document.getElementById('gameCanvas');
+            const cube = new Cube3D(canvas);
+            
+            console.log('🎮 3D Kostka gotowa! Użyj strzałek do obracania!');
+        };
+    </script>
+</body>
+</html>

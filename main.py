@@ -593,32 +593,72 @@ class Kostka3D:
         return None
     
     def sprawdz_zwyciezce(self):
-        """Sprawdza czy aktualny gracz wygrał"""
+        """Sprawdza czy aktualny gracz wygrał - KOMPLETNA WALIDACJA 3D"""
         gracz = self.aktualny_gracz
         
-        # Linie w poziomach
+        # 1. LINIE POZIOME W KAŻDYM POZIOMIE (9 linii)
         for z in range(3):
-            # Wiersze i kolumny
-            for i in range(3):
-                if (all(self.plansza[z, i, j] == gracz for j in range(3)) or
-                    all(self.plansza[z, j, i] == gracz for j in range(3))):
+            # Wiersze (3 linie)
+            for y in range(3):
+                if all(self.plansza[z, y, x] == gracz for x in range(3)):
                     return True
-            # Przekątne w poziomie
-            if (all(self.plansza[z, i, i] == gracz for i in range(3)) or
-                all(self.plansza[z, i, 2-i] == gracz for i in range(3))):
+            # Kolumny (3 linie)  
+            for x in range(3):
+                if all(self.plansza[z, y, x] == gracz for y in range(3)):
+                    return True
+        
+        # 2. PRZEKĄTNE W KAŻDYM POZIOMIE (6 linii)
+        for z in range(3):
+            # Główna przekątna w poziomie
+            if all(self.plansza[z, i, i] == gracz for i in range(3)):
+                return True
+            # Druga przekątna w poziomie
+            if all(self.plansza[z, i, 2-i] == gracz for i in range(3)):
                 return True
         
-        # Linie pionowe przez poziomy
+        # 3. LINIE PIONOWE PRZEZ POZIOMY (9 linii)
         for x in range(3):
             for y in range(3):
                 if all(self.plansza[z, y, x] == gracz for z in range(3)):
                     return True
         
-        # Główne przekątne 3D
-        if (all(self.plansza[i, i, i] == gracz for i in range(3)) or
-            all(self.plansza[i, i, 2-i] == gracz for i in range(3)) or
-            all(self.plansza[i, 2-i, i] == gracz for i in range(3)) or
-            all(self.plansza[i, 2-i, 2-i] == gracz for i in range(3))):
+        # 4. PRZEKĄTNE PIONOWE PRZEZ POZIOMY (18 linii)
+        # Przekątne w płaszczyźnie XZ (6 linii)
+        for y in range(3):
+            # Główna przekątna XZ
+            if all(self.plansza[z, y, z] == gracz for z in range(3)):
+                return True
+            # Druga przekątna XZ
+            if all(self.plansza[z, y, 2-z] == gracz for z in range(3)):
+                return True
+        
+        # Przekątne w płaszczyźnie YZ (6 linii) 
+        for x in range(3):
+            # Główna przekątna YZ
+            if all(self.plansza[z, z, x] == gracz for z in range(3)):
+                return True
+            # Druga przekątna YZ
+            if all(self.plansza[z, 2-z, x] == gracz for z in range(3)):
+                return True
+        
+        # Przekątne w płaszczyźnie XY (6 linii)
+        for z in range(3):
+            # Główna przekątna XY (już sprawdzona wyżej w punkcie 2)
+            # Druga przekątna XY (już sprawdzona wyżej w punkcie 2)
+            pass
+        
+        # 5. GŁÓWNE PRZEKĄTNE 3D PRZEZ CAŁĄ KOSTKĘ (4 linie)
+        # Przekątna (0,0,0) -> (1,1,1) -> (2,2,2)
+        if all(self.plansza[i, i, i] == gracz for i in range(3)):
+            return True
+        # Przekątna (0,0,2) -> (1,1,1) -> (2,2,0) 
+        if all(self.plansza[i, i, 2-i] == gracz for i in range(3)):
+            return True
+        # Przekątna (0,2,0) -> (1,1,1) -> (2,0,2)
+        if all(self.plansza[i, 2-i, i] == gracz for i in range(3)):
+            return True
+        # Przekątna (0,2,2) -> (1,1,1) -> (2,0,0)
+        if all(self.plansza[i, 2-i, 2-i] == gracz for i in range(3)):
             return True
         
         return False
@@ -919,6 +959,12 @@ class MouseControlledMultiGameManager:
         # Indeksy gier: [lewa_tło, prawa_tło, aktywna]
         self.game_positions = [0, 1, 2]  # które gry są na których pozycjach
         
+        # 📊 SYSTEM PUNKTOWY
+        self.total_score = 0  # Globalny wynik gracza
+        self.game_end_timers = [0, 0, 0]  # Timer dla każdej gry (10 sekund)
+        self.game_end_messages = [None, None, None]  # Komunikaty końca gry
+        self.games_in_end_state = [False, False, False]  # Które gry są w stanie końcowym
+        
         # Ustawienia każdej gry na Human vs AI z 10s delay
         for i, game in enumerate(self.games):
             game.ai_delay = 10000
@@ -1021,6 +1067,46 @@ class MouseControlledMultiGameManager:
                     self.ai_timers[i] = current_time
                     print(f"🤖 AI w grze #{i+1} wykonało ruch")
     
+    def check_game_endings(self):
+        """Sprawdza końce gier i obsługuje system punktowy"""
+        current_time = pygame.time.get_ticks()
+        
+        for i, game in enumerate(self.games):
+            # Sprawdź czy gra się właśnie zakończyła
+            if game.koniec_gry and not self.games_in_end_state[i]:
+                print(f"🏆 Gra #{i+1} ZAKOŃCZONA!")
+                self.games_in_end_state[i] = True
+                self.game_end_timers[i] = current_time
+                
+                # Ustal wynik i komunikat
+                if game.zwyciezca == 'X':  # Gracz wygrał
+                    self.total_score += 1
+                    self.game_end_messages[i] = "🎉 WYGRAŁEŚ TĘ PARTIĘ!"
+                    print(f"👤 Gracz wygrał grę #{i+1}! Punkty: +{self.total_score}")
+                elif game.zwyciezca == 'O':  # AI wygrało
+                    self.total_score -= 1
+                    self.game_end_messages[i] = "🤖 AI WYGRAŁO TĘ PARTIĘ!"
+                    print(f"🤖 AI wygrało grę #{i+1}! Punkty: {self.total_score}")
+                else:  # Remis
+                    # Remis = bez zmiany punktów
+                    self.game_end_messages[i] = "🤝 REMIS W TEJ PARTII!"
+                    print(f"🤝 Remis w grze #{i+1}! Punkty: {self.total_score}")
+            
+            # Sprawdź czy minęło 10 sekund i restart grę
+            if self.games_in_end_state[i]:
+                if current_time - self.game_end_timers[i] > 10000:  # 10 sekund
+                    print(f"🔄 Restartowanie gry #{i+1}...")
+                    self.games[i] = Kostka3D(self.screen_width, self.screen_height)
+                    self.games[i].ai_delay = 10000
+                    self.games[i].czy_ruch_ai = False
+                    self.ai_timers[i] = 0
+                    
+                    # Reset stanu końcowego
+                    self.games_in_end_state[i] = False
+                    self.game_end_timers[i] = 0
+                    self.game_end_messages[i] = None
+                    print(f"✅ Gra #{i+1} zrestartowana! Punkty zachowane: {self.total_score}")
+    
     def scale_mouse_pos(self, mouse_pos, target_rect):
         """Przeskalowuje pozycję myszy do docelowego prostokąta"""
         mx, my = mouse_pos
@@ -1079,6 +1165,65 @@ class MouseControlledMultiGameManager:
         screen.blit(left_text, (self.background_left_rect.x, self.background_left_rect.y - 25))
         screen.blit(right_text, (self.background_right_rect.x, self.background_right_rect.y - 25))
         screen.blit(active_text, (self.active_rect.x + 250, self.active_rect.y - 25))
+        
+        # 📊 WYNIK GLOBALNY NA GÓRZE EKRANU
+        score_font = pygame.font.Font(None, 48)
+        score_color = (0, 255, 0) if self.total_score >= 0 else (255, 50, 50)
+        score_text = score_font.render(f"TWÓJ WYNIK TO: {self.total_score:+d}", True, score_color)
+        score_rect = score_text.get_rect(center=(screen.get_width() // 2, 50))
+        
+        # Tło dla wyniku
+        score_bg = pygame.Surface((score_rect.width + 40, score_rect.height + 20))
+        score_bg.set_alpha(180)
+        score_bg.fill((20, 20, 40))
+        screen.blit(score_bg, (score_rect.x - 20, score_rect.y - 10))
+        screen.blit(score_text, score_rect)
+        
+        # 🏆 KOMUNIKATY KOŃCA GRY (na środku każdej gry)
+        self.draw_game_end_messages(screen, left_game, self.background_left_rect, self.game_positions[0])
+        self.draw_game_end_messages(screen, right_game, self.background_right_rect, self.game_positions[1])
+        self.draw_game_end_messages(screen, active_game, self.active_rect, self.game_positions[2])
+    
+    def draw_game_end_messages(self, screen, game, game_rect, game_index):
+        """Rysuje komunikaty końca gry dla konkretnej gry"""
+        if self.games_in_end_state[game_index] and self.game_end_messages[game_index]:
+            # Semi-transparentne tło
+            overlay = pygame.Surface(game_rect.size)
+            overlay.set_alpha(200)
+            overlay.fill((0, 0, 0))
+            screen.blit(overlay, game_rect)
+            
+            # Główny komunikat (duży)
+            big_font = pygame.font.Font(None, 36 if game_rect.width < 400 else 64)
+            message = self.game_end_messages[game_index]
+            
+            # Kolor komunikatu
+            if "WYGRAŁEŚ" in message:
+                color = (0, 255, 0)  # Zielony
+            elif "AI WYGRAŁO" in message:
+                color = (255, 100, 100)  # Czerwony  
+            else:
+                color = (255, 255, 100)  # Żółty (remis)
+            
+            message_text = big_font.render(message, True, color)
+            message_rect = message_text.get_rect(center=(game_rect.centerx, game_rect.centery - 40))
+            screen.blit(message_text, message_rect)
+            
+            # Wynik (mniejszy, pod spodem)
+            score_font = pygame.font.Font(None, 28 if game_rect.width < 400 else 48)
+            score_color = (0, 255, 0) if self.total_score >= 0 else (255, 100, 100)
+            score_text = score_font.render(f"TWÓJ WYNIK TO: {self.total_score:+d}", True, score_color)
+            score_rect = score_text.get_rect(center=(game_rect.centerx, game_rect.centery + 20))
+            screen.blit(score_text, score_rect)
+            
+            # Countdown timer
+            current_time = pygame.time.get_ticks()
+            remaining_time = 10 - (current_time - self.game_end_timers[game_index]) // 1000
+            if remaining_time > 0:
+                timer_font = pygame.font.Font(None, 24 if game_rect.width < 400 else 36)
+                timer_text = timer_font.render(f"Nowa gra za: {remaining_time}s", True, (200, 200, 200))
+                timer_rect = timer_text.get_rect(center=(game_rect.centerx, game_rect.centery + 60))
+                screen.blit(timer_text, timer_rect)
 
 
 def main_mouse_controlled_games():
@@ -1222,6 +1367,9 @@ def main_mouse_controlled_games():
         
         # Update AI w wszystkich grach
         mouse_manager.update_ai()
+        
+        # 🎯 Sprawdź końce gier i system punktowy
+        mouse_manager.check_game_endings()
         
         # Renderowanie
         mouse_manager.draw(screen)
